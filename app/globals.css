@@ -1,26 +1,97 @@
 @import "tailwindcss";
 
+/*
+  Rehub flat healthcare-tech palette.
+  Exposed as Tailwind v4 theme tokens so utilities like
+  `bg-teal`, `text-navy`, `border-coral` are available everywhere.
+  No gradients, no neon, no glassmorphism — flat, calm, clinical.
+*/
+@theme {
+  --color-navy: #102a43;
+  --color-teal: #2f9e9e;
+  --color-mint: #d9f0e5;
+  --color-offwhite: #f7f4ef;
+  --color-slate: #334e68;
+  --color-gray-muted: #d9e2ec;
+  --color-coral: #d95d4f;
+  --color-amber: #f0b429;
+  --color-success: #2f855a;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Soft, single-layer shadows only. */
+  --shadow-soft: 0 1px 2px rgba(16, 42, 67, 0.04), 0 4px 12px rgba(16, 42, 67, 0.06);
+  --shadow-panel: 0 2px 6px rgba(16, 42, 67, 0.06), 0 8px 24px rgba(16, 42, 67, 0.08);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f4ef;
+  --foreground: #102a43;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--background);
+  color: var(--foreground);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Gentle breathing pulse for the voice bubble idle state. */
+@keyframes rehub-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+.rehub-breathe {
+  animation: rehub-breathe 3.4s ease-in-out infinite;
+}
+
+/* Subtle entrance for newly arriving request rows / toasts. */
+@keyframes rehub-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rehub-rise {
+  animation: rehub-rise 0.22s ease-out both;
+}
+
+/* Soft attention pulse for the persistent urgent strip — calm, not alarming. */
+@keyframes rehub-urgent {
+  0%,
+  100% {
+    border-color: rgba(217, 93, 79, 0.55);
+  }
+  50% {
+    border-color: rgba(217, 93, 79, 0.95);
+  }
+}
+
+.rehub-urgent {
+  animation: rehub-urgent 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rehub-breathe,
+  .rehub-rise,
+  .rehub-urgent {
+    animation: none;
+  }
 }

@@ -1,0 +1,52 @@
+/**
+ * React bindings for the Rehub store.
+ *
+ * Components subscribe to the store version via useSyncExternalStore, so any
+ * mutation — local or arriving over BroadcastChannel from another device —
+ * re-renders every connected view. This is the live-sync layer in action.
+ */
+
+"use client";
+
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { getStore } from "./store";
+import type { FacilityWorkspace } from "./types";
+import { DEMO_FACILITY } from "./mockData";
+
+/** Re-renders whenever the store changes (locally or via realtime fan-out). */
+export function useStoreVersion(): number {
+  const store = getStore();
+  return useSyncExternalStore(
+    store.subscribe,
+    store.getVersion,
+    () => 0, // server snapshot
+  );
+}
+
+/** True only after the component has mounted on the client. */
+export function useMounted(): boolean {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
+
+/** Subscribe to a facility workspace. Re-renders on every store change. */
+export function useWorkspace(
+  facilityId: string = DEMO_FACILITY.id,
+): FacilityWorkspace {
+  useStoreVersion();
+  return getStore().getWorkspace(facilityId);
+}
+
+/**
+ * A ticking clock for live "waiting time" displays.
+ * Defaults to a 15s cadence — frequent enough for a care queue, light on CPU.
+ */
+export function useNow(intervalMs = 15000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
