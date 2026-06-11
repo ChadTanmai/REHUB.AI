@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RehubMark, RehubWordmark } from "./RehubLogo";
 
 const LINKS = [
   { href: "/resident", label: "Resident" },
@@ -14,8 +15,7 @@ export function SiteNav() {
     <header className="sticky top-0 z-40 border-b border-gray-muted bg-offwhite/90 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
         <Link href="/" className="flex items-center gap-2">
-          <Logo />
-          <span className="text-lg font-bold tracking-tight text-navy">Rehub</span>
+          <RehubWordmark />
         </Link>
         <nav className="hidden items-center gap-1 md:flex">
           {LINKS.map((l) => (
@@ -43,10 +43,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-gray-muted bg-white">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <div className="flex items-center gap-2">
-          <Logo />
-          <span className="font-bold text-navy">Rehub</span>
-        </div>
+        <RehubWordmark />
         <p className="mt-3 max-w-2xl text-sm text-slate/70">
           Rehub is a communication and workflow tool. It does not replace
           emergency response systems or medical judgment. Demo mode uses
@@ -61,10 +58,7 @@ export function SiteFooter() {
   );
 }
 
+/** @deprecated Use RehubMark or RehubWordmark instead. Kept for backward compat. */
 export function Logo() {
-  return (
-    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-navy text-sm font-bold text-white">
-      R
-    </span>
-  );
+  return <RehubMark size={28} />;
 }

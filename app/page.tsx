@@ -5,64 +5,60 @@ import Hero from "@/components/marketing/Hero";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/marketing/motion";
 import SafetyNote from "@/components/SafetyNote";
 
-const STEPS = [
+/* ─── Data ──────────────────────────────────────────────────────────────── */
+
+const BUILT_FOR = [
+  "Inpatient rehabilitation facilities",
+  "Skilled nursing facilities",
+  "Senior living communities",
+  "Assisted living residences",
+  "Post-acute care teams",
+];
+
+const WORKFLOW = [
   {
-    n: "01",
-    title: "Residents ask",
-    body: "A tap on a large button or a few spoken words on the room tablet. No app to learn, no menus to navigate.",
+    phase: "Request",
+    heading: "Residents communicate their needs",
+    body: "A dedicated tablet in each room. Residents tap a large button or speak naturally — the system classifies the request by type and urgency, then asks for confirmation before anything is sent. No app to install. No training required.",
+    details: ["Voice, button, or typed input", "Deterministic urgency scoring", "Resident confirms before sending"],
   },
   {
-    n: "02",
-    title: "Rehub routes",
-    body: "Each request is classified by type and urgency, then placed into your facility's live queue in real time.",
+    phase: "Route",
+    heading: "Requests reach the right staff, instantly",
+    body: "Every confirmed request enters a shared facility queue. It's prioritized by clinical urgency and time waiting, then broadcast to every subscribed therapist dashboard over the facility network. Urgent requests surface in a persistent alert strip.",
+    details: ["Real-time facility-wide queue", "Priority: Urgent → Important → Routine", "Persistent alert strip for urgent items"],
   },
   {
-    n: "03",
-    title: "Care teams respond",
-    body: "Staff acknowledge, take ownership, and resolve — while the resident's screen keeps them reassured at every step.",
+    phase: "Respond",
+    heading: "Staff acknowledge, act, and resolve",
+    body: "Therapists see the full context: room, request type, AI summary, transcript, priority score, and how long the resident has been waiting. They acknowledge, assign, mark in-progress, and resolve — every action is timestamped for response-time analytics.",
+    details: ["One-click status transitions", "Immutable audit trail", "Resident screen updates in real time"],
+  },
+  {
+    phase: "Analyze",
+    heading: "Administrators understand the workflow",
+    body: "Response times, request volume, staff coverage, common request types — all visible in the admin dashboard. Identify patterns before they become problems. Export to CSV for compliance and operations reviews.",
+    details: ["Response-time trends by shift", "Request volume by type and room", "CSV export for compliance"],
   },
 ];
 
-const FEATURES = [
-  {
-    title: "Voice or one-tap requests",
-    body: "Residents speak naturally or press a large, high-contrast button. Designed to be usable by an elderly person on an iPad.",
-  },
-  {
-    title: "Priority you can trust",
-    body: "A transparent, explainable scoring model surfaces urgent needs first — never a black box, never a diagnosis.",
-  },
-  {
-    title: "Live shared queue",
-    body: "Every assigned therapist sees the same real-time board: room, request, priority, status, and time waiting.",
-  },
-  {
-    title: "Status that reassures",
-    body: "When staff acknowledge or start helping, the resident's room screen updates automatically. No one is left wondering.",
-  },
-  {
-    title: "Response analytics",
-    body: "Understand response times, common requests, and workflow bottlenecks across rooms, staff, and shifts.",
-  },
-  {
-    title: "Set up in minutes",
-    body: "Create a facility, pair room tablets and staff devices with a code, and you're live. No installation, no hardware lock-in.",
-  },
+const CAPABILITIES = [
+  { title: "Facility-wide real-time sync", body: "Patient rooms, therapist dashboards, and admin consoles share one live workspace. Updates propagate across all devices within seconds." },
+  { title: "Transparent priority model", body: "Every score traces to a keyword and a weight. Urgent safety phrases are hard-coded to surface immediately. No opaque ML — every decision is auditable." },
+  { title: "Self-serve facility setup", body: "Create a facility, pair room tablets and staff devices with a short code. Most communities are fully operational in under ten minutes." },
+  { title: "National directory integration", body: "Search 1,200+ CMS-registered rehabilitation facilities during onboarding. Selecting your facility auto-fills address, phone, and certification data." },
+  { title: "Designed for accessibility", body: "High-contrast, large tap targets, plain language, voice input with typed fallback. Usable by an elderly resident on an iPad without assistance." },
+  { title: "Production-ready data architecture", body: "Supabase Postgres with row-level security, Realtime subscriptions, an immutable event log, and a documented path to HIPAA-ready deployment." },
 ];
 
-const ROLES = [
-  { tag: "Room screen", title: "For residents", body: "An always-on tablet in each room. Calm, large, and impossible to get lost in.", href: "/resident" },
-  { tag: "Dashboard", title: "For therapists", body: "One shared live queue across every assigned room, sorted by urgency.", href: "/therapist" },
-  { tag: "Analytics", title: "For administrators", body: "Response trends and workflow insight across the whole facility.", href: "/admin" },
-  { tag: "Setup", title: "For your IT lead", body: "Self-serve facility setup and device pairing — no vendor visit required.", href: "/onboarding" },
+const METRICS = [
+  { value: "1,221", label: "US rehab facilities in the directory" },
+  { value: "< 5 min", label: "Typical facility setup time" },
+  { value: "Real-time", label: "Request delivery to staff" },
+  { value: "100%", label: "Offline-capable demo mode" },
 ];
 
-const STATS = [
-  { value: "< 5 min", label: "Typical setup time" },
-  { value: "Real-time", label: "Request delivery" },
-  { value: "3 inputs", label: "Voice, button, or typed" },
-  { value: "0", label: "Apps for residents to install" },
-];
+/* ─── Page ──────────────────────────────────────────────────────────────── */
 
 export default function Home() {
   return (
@@ -71,58 +67,98 @@ export default function Home() {
       <main className="flex-1">
         <Hero />
 
-        {/* Stats band */}
+        {/* Trust band — who this is for */}
         <section className="border-y border-gray-muted bg-white">
-          <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-            <StaggerGroup className="grid grid-cols-2 gap-6 md:grid-cols-4">
-              {STATS.map((s) => (
-                <StaggerItem key={s.label} className="text-center">
-                  <p className="text-3xl font-bold text-navy">{s.value}</p>
-                  <p className="mt-1 text-sm text-slate/70">{s.label}</p>
+          <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+            <p className="mb-4 text-center text-xs font-semibold uppercase tracking-widest text-slate/50">
+              Purpose-built for
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2">
+              {BUILT_FOR.map((b) => (
+                <span key={b} className="whitespace-nowrap text-sm font-medium text-slate/70">
+                  {b}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* How it works — workflow, not numbered cards */}
+        <section id="how" className="scroll-mt-20">
+          <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+            <Reveal>
+              <p className="text-xs font-semibold uppercase tracking-widest text-teal">
+                System workflow
+              </p>
+              <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-snug text-navy sm:text-4xl">
+                A closed-loop communication system, from request to resolution.
+              </h2>
+            </Reveal>
+
+            <div className="mt-14 space-y-0">
+              {WORKFLOW.map((w, i) => (
+                <Reveal key={w.phase} delay={i * 0.04}>
+                  <div className="grid gap-6 border-t border-gray-muted py-10 md:grid-cols-[160px_1fr_280px]">
+                    <div>
+                      <span className="inline-block rounded-md bg-navy px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-white">
+                        {w.phase}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-navy">{w.heading}</h3>
+                      <p className="mt-3 max-w-xl leading-relaxed text-slate/80">{w.body}</p>
+                    </div>
+                    <ul className="space-y-2 text-sm text-slate/70">
+                      {w.details.map((d) => (
+                        <li key={d} className="flex items-start gap-2">
+                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-teal" />
+                          {d}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Metrics band */}
+        <section className="border-y border-gray-muted bg-navy">
+          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+            <StaggerGroup className="grid grid-cols-2 gap-8 md:grid-cols-4">
+              {METRICS.map((m) => (
+                <StaggerItem key={m.label} className="text-center">
+                  <p className="text-3xl font-bold text-white">{m.value}</p>
+                  <p className="mt-1 text-sm text-mint">{m.label}</p>
                 </StaggerItem>
               ))}
             </StaggerGroup>
           </div>
         </section>
 
-        {/* How it works */}
-        <section id="how" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6">
-          <Reveal>
-            <p className="text-sm font-semibold uppercase tracking-wide text-teal">How it works</p>
-            <h2 className="mt-2 max-w-2xl text-3xl font-bold text-navy sm:text-4xl">
-              From a resident&apos;s need to a resolved request — in one connected loop.
-            </h2>
-          </Reveal>
-
-          <StaggerGroup className="mt-12 grid gap-8 md:grid-cols-3">
-            {STEPS.map((s) => (
-              <StaggerItem key={s.n}>
-                <div className="rounded-2xl border border-gray-muted bg-white p-6 shadow-soft transition-shadow hover:shadow-panel">
-                  <span className="text-sm font-bold text-teal">{s.n}</span>
-                  <h3 className="mt-2 text-xl font-semibold text-navy">{s.title}</h3>
-                  <p className="mt-2 leading-relaxed text-slate/80">{s.body}</p>
-                </div>
-              </StaggerItem>
-            ))}
-          </StaggerGroup>
-        </section>
-
-        {/* Product / features */}
-        <section id="product" className="scroll-mt-20 border-y border-gray-muted bg-mint/30">
+        {/* Platform capabilities */}
+        <section id="product" className="scroll-mt-20">
           <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
             <Reveal>
-              <p className="text-sm font-semibold uppercase tracking-wide text-teal">The product</p>
-              <h2 className="mt-2 max-w-2xl text-3xl font-bold text-navy sm:text-4xl">
-                Everything a care team needs to never miss a request.
+              <p className="text-xs font-semibold uppercase tracking-widest text-teal">
+                Platform
+              </p>
+              <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-snug text-navy sm:text-4xl">
+                Infrastructure for care communication — not a chatbot.
               </h2>
+              <p className="mt-4 max-w-2xl text-slate/80">
+                Rehub is a connected facility system. Room screens, therapist
+                dashboards, and admin consoles share one real-time workspace.
+              </p>
             </Reveal>
 
-            <StaggerGroup className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {FEATURES.map((f) => (
-                <StaggerItem key={f.title}>
-                  <div className="h-full rounded-2xl border border-gray-muted bg-white p-6 shadow-soft transition-shadow hover:shadow-panel">
-                    <h3 className="text-lg font-semibold text-navy">{f.title}</h3>
-                    <p className="mt-2 leading-relaxed text-slate/80">{f.body}</p>
+            <StaggerGroup className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-gray-muted bg-gray-muted sm:grid-cols-2 lg:grid-cols-3">
+              {CAPABILITIES.map((c) => (
+                <StaggerItem key={c.title}>
+                  <div className="h-full bg-white p-6">
+                    <h3 className="text-base font-semibold text-navy">{c.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-slate/80">{c.body}</p>
                   </div>
                 </StaggerItem>
               ))}
@@ -130,81 +166,78 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Roles / architecture */}
-        <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-          <Reveal>
-            <p className="text-sm font-semibold uppercase tracking-wide text-teal">One platform, four views</p>
-            <h2 className="mt-2 max-w-2xl text-3xl font-bold text-navy sm:text-4xl">
-              Built around how your facility actually works.
-            </h2>
-            <p className="mt-4 max-w-2xl text-slate">
-              Room screens and dashboards never talk to each other directly — they
-              share one facility workspace, so everyone sees the same truth in
-              real time.
-            </p>
-          </Reveal>
-
-          <StaggerGroup className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {ROLES.map((r) => (
-              <StaggerItem key={r.title}>
-                <Link
-                  href={r.href}
-                  className="group block h-full rounded-2xl border border-gray-muted bg-white p-6 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-panel"
-                >
-                  <span className="inline-block rounded-md bg-navy/8 px-2 py-0.5 text-xs font-semibold text-navy">
-                    {r.tag}
-                  </span>
-                  <h3 className="mt-3 text-lg font-semibold text-navy">{r.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-slate/80">{r.body}</p>
-                  <span className="mt-4 inline-block text-sm font-semibold text-teal transition-transform group-hover:translate-x-0.5">
-                    Explore →
-                  </span>
-                </Link>
-              </StaggerItem>
-            ))}
-          </StaggerGroup>
-        </section>
-
-        {/* Why it matters / quote */}
-        <section className="border-y border-gray-muted bg-navy">
-          <div className="mx-auto max-w-4xl px-4 py-20 text-center sm:px-6">
+        {/* Architecture summary */}
+        <section className="border-y border-gray-muted bg-mint/20">
+          <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6">
             <Reveal>
-              <p className="text-2xl font-semibold leading-snug text-white sm:text-3xl">
-                &ldquo;In care environments, small delays can become serious. Rehub
-                gives staff a clearer view of resident needs before they get
-                missed.&rdquo;
+              <p className="text-xs font-semibold uppercase tracking-widest text-teal">
+                Architecture
               </p>
-              <p className="mt-6 text-sm font-medium text-mint">The Rehub mission</p>
+              <h2 className="mt-3 text-2xl font-bold text-navy sm:text-3xl">
+                How Rehub connects your facility
+              </h2>
+              <div className="mt-8 rounded-xl border border-gray-muted bg-white p-6 font-mono text-sm leading-loose text-slate shadow-soft">
+                <p className="text-navy">
+                  <span className="text-teal">Room tablet</span> → submits request →{" "}
+                  <span className="text-teal">Rehub backend</span>
+                </p>
+                <p className="text-navy">
+                  <span className="text-teal">Rehub backend</span> → classifies, scores, stores →{" "}
+                  <span className="text-teal">Facility queue</span>
+                </p>
+                <p className="text-navy">
+                  <span className="text-teal">Facility queue</span> → broadcasts via Realtime →{" "}
+                  <span className="text-teal">Therapist dashboards</span>
+                </p>
+                <p className="text-navy">
+                  <span className="text-teal">Therapist</span> → acknowledge / resolve →{" "}
+                  <span className="text-teal">Room screen updates</span>
+                </p>
+                <p className="mt-4 text-xs text-slate/60">
+                  Devices never communicate directly. All data flows through the
+                  Rehub backend, scoped to a single facility workspace.
+                </p>
+              </div>
             </Reveal>
           </div>
         </section>
 
-        {/* Final CTA */}
+        {/* CTA — enterprise: request demo is primary, self-serve is secondary */}
         <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
           <Reveal>
-            <div className="overflow-hidden rounded-3xl border border-gray-muted bg-white p-8 shadow-panel sm:p-12">
-              <div className="grid items-center gap-8 lg:grid-cols-[1.5fr_1fr]">
+            <div className="rounded-2xl border border-gray-muted bg-white p-8 shadow-panel sm:p-12">
+              <div className="grid items-center gap-10 lg:grid-cols-[1.5fr_1fr]">
                 <div>
                   <h2 className="text-3xl font-bold text-navy sm:text-4xl">
-                    Ready to see every request, instantly?
+                    See Rehub in your facility.
                   </h2>
                   <p className="mt-4 max-w-xl text-lg text-slate">
-                    Set up a facility in minutes, or talk to us about a pilot at
-                    your community.
+                    Schedule a 30-minute walkthrough with our team. We&apos;ll
+                    configure a demo with your rooms, your workflow, and your
+                    priorities — so you see exactly how it fits.
+                  </p>
+                  <p className="mt-3 text-sm text-slate/60">
+                    Or try the self-serve setup if you want to explore on your own first.
                   </p>
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                  <Link
-                    href="/onboarding"
-                    className="rounded-lg bg-teal px-6 py-3 text-center text-base font-semibold text-white shadow-soft transition-all hover:bg-[#2a8d8d] hover:shadow-panel"
-                  >
-                    Set up your facility
-                  </Link>
+                <div className="flex flex-col gap-3">
                   <Link
                     href="/contact"
-                    className="rounded-lg border-2 border-navy bg-white px-6 py-3 text-center text-base font-semibold text-navy transition-colors hover:bg-navy/5"
+                    className="rounded-lg bg-navy px-6 py-3.5 text-center text-base font-semibold text-white shadow-soft transition-all hover:bg-[#0c2030] hover:shadow-panel"
                   >
-                    Talk to sales
+                    Request a demo
+                  </Link>
+                  <Link
+                    href="/onboarding"
+                    className="rounded-lg border border-gray-muted bg-white px-6 py-3.5 text-center text-base font-semibold text-navy transition-colors hover:bg-offwhite"
+                  >
+                    Self-serve setup
+                  </Link>
+                  <Link
+                    href="/demo"
+                    className="text-center text-sm font-medium text-teal hover:underline"
+                  >
+                    Or explore the live demo →
                   </Link>
                 </div>
               </div>
