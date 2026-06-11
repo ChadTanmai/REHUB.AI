@@ -43,6 +43,7 @@ import {
   minutesBetween,
   recentUnresolvedCount,
 } from "./requestUtils";
+import { sanitizeField, sanitizeText } from "./security";
 
 const STORAGE_PREFIX = "rehub:facility:";
 const CHANNEL_NAME = "rehub-sync";
@@ -212,10 +213,10 @@ class RehubStore {
   }): Facility {
     const facility: Facility = {
       id: uid("fac"),
-      name: input.name,
+      name: sanitizeField(input.name, 80) || "New Facility",
       facilityCode: input.facilityCode.trim().toUpperCase(),
-      roomCount: input.roomCount,
-      teamName: input.teamName,
+      roomCount: Math.max(0, Math.min(500, Math.floor(input.roomCount) || 0)),
+      teamName: sanitizeField(input.teamName, 80) || "Care Team",
       createdAt: new Date().toISOString(),
     };
     this.workspaces.set(facility.id, {
@@ -248,8 +249,8 @@ class RehubStore {
     const room: Room = {
       id: uid("room"),
       facilityId,
-      roomNumber: input.roomNumber,
-      displayName: input.displayName,
+      roomNumber: sanitizeField(input.roomNumber, 12),
+      displayName: sanitizeField(input.displayName, 40) || "Resident",
       active: true,
       deviceId: input.deviceId,
       lastSeenAt: new Date().toISOString(),
@@ -295,14 +296,15 @@ class RehubStore {
     const ws = this.ensureFacility(input.facilityId);
     const room = ws.rooms.find((r) => r.id === input.roomId);
 
+    const cleanText = input.text ? sanitizeText(input.text) : undefined;
     const recent = recentUnresolvedCount(ws.requests, input.roomId);
-    const classification = classifyRequest(input.text ?? "", {
+    const classification = classifyRequest(cleanText ?? "", {
       fixedType: input.fixedType,
       recentUnresolvedCount: recent,
     });
 
     const { staffSummary, patientConfirmation } = buildSummary({
-      transcript: input.source === "Button" ? undefined : input.text,
+      transcript: input.source === "Button" ? undefined : cleanText,
       requestType: classification.requestType,
       priority: classification.priority,
       detectedKeywords: classification.detectedKeywords,
@@ -324,7 +326,7 @@ class RehubStore {
       notes: classification.staffNote,
       aiSummary: staffSummary,
       source: input.source,
-      transcript: input.source === "Button" ? undefined : input.text,
+      transcript: input.source === "Button" ? undefined : cleanText,
       aiConfidence: classification.confidence,
       detectedKeywords: classification.detectedKeywords,
       safetyFlag: classification.safetyFlag,

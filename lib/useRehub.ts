@@ -9,6 +9,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+// useEffect/useState retained for useNow below.
 import { getStore } from "./store";
 import type { FacilityWorkspace } from "./types";
 import { DEMO_FACILITY } from "./mockData";
@@ -23,11 +24,19 @@ export function useStoreVersion(): number {
   );
 }
 
-/** True only after the component has mounted on the client. */
+const emptySubscribe = () => () => {};
+
+/**
+ * True only after the component has mounted on the client.
+ * Implemented with useSyncExternalStore (server snapshot = false, client = true)
+ * so there is no setState-in-effect and no hydration mismatch.
+ */
 export function useMounted(): boolean {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 }
 
 /** Subscribe to a facility workspace. Re-renders on every store change. */

@@ -40,9 +40,11 @@ export interface FacilityChannel {
 }
 
 export function subscribeToFacility(
-  _facilityId: string,
-  _onChange: () => void,
+  facilityId: string,
+  onChange: () => void,
 ): FacilityChannel {
+  void facilityId;
+  void onChange;
   // No-op in MVP. Replace with a Supabase channel:
   //   supabase.channel(`facility:${facilityId}`)
   //     .on('postgres_changes',

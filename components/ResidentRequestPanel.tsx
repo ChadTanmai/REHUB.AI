@@ -55,11 +55,8 @@ export default function ResidentRequestPanel({
 
   const meterRef = useRef<AmplitudeMeter | null>(null);
   const speechRef = useRef<SpeechSession | null>(null);
-  const [speechSupported, setSpeechSupported] = useState(true);
-
-  useEffect(() => {
-    setSpeechSupported(isSpeechRecognitionSupported());
-  }, []);
+  // Computed once on the client (this panel only renders after mount).
+  const [speechSupported] = useState(() => isSpeechRecognitionSupported());
 
   // Always release the mic on unmount.
   useEffect(() => {

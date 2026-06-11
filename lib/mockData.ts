@@ -36,7 +36,7 @@ const ROOM_SEED: Array<[string, string]> = [
   ["120", "Walter"],
 ];
 
-export const DEMO_ROOMS: Room[] = ROOM_SEED.map(([roomNumber, displayName], i) => ({
+export const DEMO_ROOMS: Room[] = ROOM_SEED.map(([roomNumber, displayName]) => ({
   id: `room-${roomNumber}`,
   facilityId: DEMO_FACILITY.id,
   roomNumber,
