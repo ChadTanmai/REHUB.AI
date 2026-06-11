@@ -44,6 +44,14 @@ import {
   recentUnresolvedCount,
 } from "./requestUtils";
 import { sanitizeField, sanitizeText } from "./security";
+import {
+  dbCreateFacility,
+  dbUpsertRoom,
+  dbUpsertTherapist,
+  dbInsertRequest,
+  dbUpdateRequestStatus,
+  dbInsertEvent,
+} from "./db";
 
 const STORAGE_PREFIX = "rehub:facility:";
 const CHANNEL_NAME = "rehub-sync";
@@ -210,6 +218,12 @@ class RehubStore {
     facilityCode: string;
     roomCount: number;
     teamName: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    phone?: string;
+    ccn?: string;
   }): Facility {
     const facility: Facility = {
       id: uid("fac"),
@@ -218,6 +232,12 @@ class RehubStore {
       roomCount: Math.max(0, Math.min(500, Math.floor(input.roomCount) || 0)),
       teamName: sanitizeField(input.teamName, 80) || "Care Team",
       createdAt: new Date().toISOString(),
+      address: input.address ? sanitizeField(input.address, 120) : undefined,
+      city: input.city ? sanitizeField(input.city, 60) : undefined,
+      state: input.state ? sanitizeField(input.state, 4) : undefined,
+      zip: input.zip ? sanitizeField(input.zip, 10) : undefined,
+      phone: input.phone ? sanitizeField(input.phone, 24) : undefined,
+      ccn: input.ccn ? sanitizeField(input.ccn, 12) : undefined,
     };
     this.workspaces.set(facility.id, {
       facility,
@@ -228,6 +248,8 @@ class RehubStore {
     });
     this.persist(facility.id);
     this.emit();
+    // Fire-and-forget: persist to Supabase when configured.
+    dbCreateFacility(facility).catch(() => {});
     return facility;
   }
 
@@ -259,6 +281,7 @@ class RehubStore {
     ws.facility.roomCount = ws.rooms.length;
     this.persist(facilityId);
     this.emit();
+    dbUpsertRoom(room).catch(() => {});
     return room;
   }
 
@@ -276,6 +299,7 @@ class RehubStore {
     ws.therapists.push(therapist);
     this.persist(facilityId);
     this.emit();
+    dbUpsertTherapist(therapist).catch(() => {});
     return therapist;
   }
 
@@ -334,17 +358,21 @@ class RehubStore {
     };
 
     ws.requests.push(request);
-    this.pushEvent(ws, {
+    const createdEvent: RequestEvent = {
+      id: uid("evt"),
       requestId: request.id,
       facilityId: input.facilityId,
       eventType: "created",
       actorType: "resident",
       actorName: request.residentName,
       newStatus: "New",
-    });
-
+      timestamp: new Date().toISOString(),
+    };
+    ws.events.push(createdEvent);
     this.persist(input.facilityId);
     this.emit();
+    dbInsertRequest(request).catch(() => {});
+    dbInsertEvent(createdEvent).catch(() => {});
     // patientConfirmation is returned via the request's downstream UI; we expose
     // it on the store for the room screen to read if desired.
     (request as Request & { patientConfirmation?: string }).patientConfirmation =
@@ -395,7 +423,7 @@ class RehubStore {
           ? "in_progress"
           : "resolved";
 
-    this.pushEvent(ws, {
+    const transitionEvent = this.pushEvent(ws, {
       requestId,
       facilityId,
       eventType,
@@ -407,6 +435,16 @@ class RehubStore {
 
     this.persist(facilityId);
     this.emit();
+    // Supabase persistence (fire-and-forget).
+    dbUpdateRequestStatus(requestId, to, actor, {
+      acknowledgedAt: req.acknowledgedAt,
+      inProgressAt: req.inProgressAt,
+      resolvedAt: req.resolvedAt,
+      acknowledgedBy: req.acknowledgedBy,
+      assignedTherapist: req.assignedTherapist,
+      responseTimeMinutes: req.responseTimeMinutes,
+    }).catch(() => {});
+    dbInsertEvent(transitionEvent).catch(() => {});
     return req;
   }
 
@@ -428,12 +466,14 @@ class RehubStore {
   private pushEvent(
     ws: FacilityWorkspace,
     e: Omit<RequestEvent, "id" | "timestamp">,
-  ) {
-    ws.events.push({
+  ): RequestEvent {
+    const event: RequestEvent = {
       id: uid("evt"),
       timestamp: new Date().toISOString(),
       ...e,
-    });
+    };
+    ws.events.push(event);
+    return event;
   }
 
   /** Reset a facility back to seeded demo data (used by the demo controls). */

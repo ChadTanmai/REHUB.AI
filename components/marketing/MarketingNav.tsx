@@ -3,15 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Logo } from "@/components/SiteNav";
+import { RehubWordmark } from "@/components/RehubLogo";
 import { EASE } from "./motion";
 
 const LINKS = [
   { href: "/#how", label: "How it works" },
   { href: "/#product", label: "Product" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/demo", label: "Demo" },
-  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact sales" },
 ];
 
 export default function MarketingNav() {
@@ -37,9 +36,8 @@ export default function MarketingNav() {
       }`}
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <Logo />
-          <span className="text-lg font-bold tracking-tight text-navy">Rehub</span>
+        <Link href="/">
+          <RehubWordmark />
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
@@ -54,18 +52,24 @@ export default function MarketingNav() {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-3 md:flex">
+          <Link
+            href="/demo"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-slate transition-colors hover:text-navy"
+          >
+            Live demo
+          </Link>
           <Link
             href="/therapist"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-slate transition-colors hover:text-navy"
+            className="rounded-lg border border-gray-muted bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-offwhite"
           >
             Sign in
           </Link>
           <Link
-            href="/onboarding"
+            href="/contact"
             className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white shadow-soft transition-all hover:bg-[#0c2030] hover:shadow-panel"
           >
-            Get started
+            Request demo
           </Link>
         </div>
 
@@ -108,7 +112,14 @@ export default function MarketingNav() {
                   {l.label}
                 </Link>
               ))}
-              <div className="flex gap-2 pt-2">
+              <Link
+                href="/demo"
+                onClick={() => setOpen(false)}
+                className="block rounded-md px-3 py-2.5 text-base font-medium text-slate hover:bg-white hover:text-navy"
+              >
+                Live demo
+              </Link>
+              <div className="flex gap-2 pt-3">
                 <Link
                   href="/therapist"
                   onClick={() => setOpen(false)}
@@ -117,11 +128,11 @@ export default function MarketingNav() {
                   Sign in
                 </Link>
                 <Link
-                  href="/onboarding"
+                  href="/contact"
                   onClick={() => setOpen(false)}
                   className="flex-1 rounded-lg bg-navy px-4 py-2.5 text-center text-sm font-semibold text-white"
                 >
-                  Get started
+                  Request demo
                 </Link>
               </div>
             </div>

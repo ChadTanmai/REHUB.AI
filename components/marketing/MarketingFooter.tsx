@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Logo } from "@/components/SiteNav";
+import { RehubWordmark } from "@/components/RehubLogo";
 
 const COLUMNS = [
   {
@@ -35,10 +35,7 @@ export default function MarketingFooter() {
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
-            <div className="flex items-center gap-2">
-              <Logo />
-              <span className="text-lg font-bold text-navy">Rehub</span>
-            </div>
+            <RehubWordmark />
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate/70">
               The communication and workflow platform for rehab centers, senior
               living, and care teams.

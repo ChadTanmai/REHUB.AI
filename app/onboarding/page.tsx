@@ -7,7 +7,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import MarketingNav from "@/components/marketing/MarketingNav";
 import MarketingFooter from "@/components/marketing/MarketingFooter";
 import { EASE } from "@/components/marketing/motion";
+import FacilityAutocomplete from "@/components/marketing/FacilityAutocomplete";
 import type { TherapistRole } from "@/lib/types";
+import { suggestCode, type DirectoryFacility } from "@/lib/facilityDirectory";
 import { getStore } from "@/lib/store";
 import { saveTherapistSession } from "@/lib/session";
 import { saveLead } from "@/lib/leads";
@@ -49,6 +51,13 @@ export default function OnboardingPage() {
   const [code, setCode] = useState("");
   const [teamName, setTeamName] = useState("");
   const [codeTouched, setCodeTouched] = useState(false);
+  const [matched, setMatched] = useState<DirectoryFacility | null>(null);
+
+  function selectDirectory(f: DirectoryFacility) {
+    setFacilityName(f.name);
+    setMatched(f);
+    if (!codeTouched) setCode(suggestCode(f));
+  }
 
   // Admin
   const [adminName, setAdminName] = useState("");
@@ -102,6 +111,12 @@ export default function OnboardingPage() {
         normalizeFacilityCode(effectiveCode) || `REHUB-${Date.now() % 10000}`,
       roomCount: rooms.length,
       teamName: teamName || `${facilityName} Care Team`,
+      address: matched?.address,
+      city: matched?.city,
+      state: matched?.state,
+      zip: matched?.zip,
+      phone: matched?.phone,
+      ccn: matched?.ccn,
     });
 
     rooms.forEach((num, i) =>
@@ -197,16 +212,49 @@ export default function OnboardingPage() {
                 transition={{ duration: 0.35, ease: EASE }}
               >
                 {step === 0 && (
-                  <Step title="Tell us about your facility" subtitle="This creates your shared Rehub workspace.">
+                  <Step title="Tell us about your facility" subtitle="Search the national directory — we'll auto-fill the rest.">
                     <Field label="Facility name">
-                      <input
+                      <FacilityAutocomplete
                         value={facilityName}
-                        onChange={(e) => setFacilityName(e.target.value)}
-                        placeholder="e.g. Maplewood Rehabilitation"
-                        className="input"
-                        autoFocus
+                        onChange={(v) => {
+                          setFacilityName(v);
+                          setMatched(null);
+                        }}
+                        onSelect={selectDirectory}
                       />
                     </Field>
+
+                    <AnimatePresence>
+                      {matched && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.25, ease: EASE }}
+                          className="overflow-hidden"
+                        >
+                          <div className="flex items-start gap-3 rounded-xl border border-teal/30 bg-mint/50 px-4 py-3">
+                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal text-white">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </span>
+                            <div className="text-sm">
+                              <p className="font-semibold text-navy">Matched from the CMS directory</p>
+                              <p className="text-slate/80">
+                                {[matched.address, matched.city, matched.state, matched.zip]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </p>
+                              {matched.phone && (
+                                <p className="text-slate/70">{matched.phone} · {matched.ownership}</p>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     <Field label="Facility code (residents & staff use this to pair)">
                       <input
                         value={effectiveCode}
