@@ -1,10 +1,11 @@
-import { SiteNav, SiteFooter } from "@/components/SiteNav";
+import MarketingNav from "@/components/marketing/MarketingNav";
+import MarketingFooter from "@/components/marketing/MarketingFooter";
 import SafetyNote from "@/components/SafetyNote";
 
 export default function AboutPage() {
   return (
     <>
-      <SiteNav />
+      <MarketingNav />
       <main className="flex-1">
         <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
           <h1 className="text-3xl font-bold text-navy">About Rehub</h1>
@@ -44,7 +45,7 @@ export default function AboutPage() {
           </p>
         </div>
       </main>
-      <SiteFooter />
+      <MarketingFooter />
     </>
   );
 }
