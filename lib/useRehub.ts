@@ -11,6 +11,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 // useEffect/useState retained for useNow below.
 import { getStore } from "./store";
+import { subscribeToFacility } from "./supabase";
 import type { FacilityWorkspace } from "./types";
 import { DEMO_FACILITY } from "./mockData";
 
@@ -39,12 +40,27 @@ export function useMounted(): boolean {
   );
 }
 
-/** Subscribe to a facility workspace. Re-renders on every store change. */
+/**
+ * Subscribe to a facility workspace.
+ * Re-renders on every store change — local (BroadcastChannel) and remote
+ * (Supabase Realtime when configured).
+ */
 export function useWorkspace(
   facilityId: string = DEMO_FACILITY.id,
 ): FacilityWorkspace {
   useStoreVersion();
-  return getStore().getWorkspace(facilityId);
+  const store = getStore();
+
+  // When Supabase is configured, subscribe to remote updates and reload the
+  // workspace into the local store so BroadcastChannel fans it to all tabs.
+  useEffect(() => {
+    const unsub = subscribeToFacility(facilityId, () => {
+      store.ensureFacility(facilityId);
+    });
+    return unsub;
+  }, [facilityId, store]);
+
+  return store.getWorkspace(facilityId);
 }
 
 /**

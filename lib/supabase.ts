@@ -1,55 +1,80 @@
 /**
- * Supabase integration — documented, not wired up in the MVP.
+ * Supabase client + feature flag.
  *
- * The MVP runs entirely on the local store (lib/store.ts) so it demos with no
- * backend, no keys, and no patient data leaving the device. This file marks the
- * single seam where production realtime plugs in.
+ * The app runs in two modes:
+ *   - LOCAL (default): localStorage + BroadcastChannel — no backend required.
+ *   - SUPABASE: when NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+ *     are set, all reads/writes go through Supabase and realtime subscriptions
+ *     provide live cross-device sync.
  *
- * Planned production model
- * ------------------------
- *  Tables: facilities, rooms, therapists, requests, request_events,
- *          ai_classifications, device_sessions
- *
- *  Realtime: subscribe to the `requests` and `request_events` tables filtered
- *  by `facility_id`. Every room screen and therapist dashboard joins the same
- *  facility channel, so an insert/update fans out to all connected devices —
- *  exactly what BroadcastChannel emulates today.
- *
- *  Auth: Supabase Auth with role-based access (room device, therapist, admin),
- *  facility-scoped row-level security, and an audit log built from
- *  request_events. See docs/privacy_notes.md.
- *
- * To enable later:
- *   1. npm install @supabase/supabase-js
- *   2. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
- *   3. Implement createSupabaseClient() and subscribeToFacility() below
- *   4. Have lib/store.ts persist/broadcast through Supabase instead of
- *      localStorage + BroadcastChannel. Call sites do not change.
+ * Call sites use lib/db.ts (the repository layer) — they never touch the
+ * client directly, so swapping backends doesn't ripple through the app.
  */
 
-export const SUPABASE_ENABLED =
-  typeof process !== "undefined" &&
-  Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
-/**
- * Sketch of the realtime subscription the store would use in production.
- * Intentionally a no-op in MVP.
- */
-export interface FacilityChannel {
-  unsubscribe: () => void;
+export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+
+export const SUPABASE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+
+let _client: SupabaseClient<Database> | null = null;
+
+/** Returns the shared Supabase client, or throws if Supabase is not configured. */
+export function getSupabaseClient(): SupabaseClient<Database> {
+  if (!SUPABASE_ENABLED) {
+    throw new Error(
+      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+    );
+  }
+  if (!_client) {
+    _client = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      realtime: { params: { eventsPerSecond: 10 } },
+    });
+  }
+  return _client;
 }
 
+/**
+ * Subscribe to live changes in a facility's request queue.
+ * Calls `onUpdate` whenever a request is inserted or updated.
+ * Returns an unsubscribe function.
+ *
+ * In local mode this is a no-op (BroadcastChannel handles it).
+ */
 export function subscribeToFacility(
   facilityId: string,
-  onChange: () => void,
-): FacilityChannel {
-  void facilityId;
-  void onChange;
-  // No-op in MVP. Replace with a Supabase channel:
-  //   supabase.channel(`facility:${facilityId}`)
-  //     .on('postgres_changes',
-  //         { event: '*', schema: 'public', table: 'requests',
-  //           filter: `facility_id=eq.${facilityId}` }, onChange)
-  //     .subscribe()
-  return { unsubscribe: () => {} };
+  onUpdate: () => void,
+): () => void {
+  if (!SUPABASE_ENABLED) return () => {};
+
+  const client = getSupabaseClient();
+  const channel = client
+    .channel(`facility:${facilityId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "requests",
+        filter: `facility_id=eq.${facilityId}`,
+      },
+      onUpdate,
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "request_events",
+        filter: `facility_id=eq.${facilityId}`,
+      },
+      onUpdate,
+    )
+    .subscribe();
+
+  return () => {
+    client.removeChannel(channel);
+  };
 }

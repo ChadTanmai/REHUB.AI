@@ -44,6 +44,19 @@ export default function FacilityPage() {
                 </code>{" "}
                 · {ws.facility.teamName}
               </p>
+              {(ws.facility.address || ws.facility.city) && (
+                <p className="mt-0.5 text-sm text-slate/70">
+                  {[
+                    ws.facility.address,
+                    ws.facility.city,
+                    ws.facility.state,
+                    ws.facility.zip,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
+                  {ws.facility.phone ? ` · ${ws.facility.phone}` : ""}
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href="/setup/room" className="btn-primary">

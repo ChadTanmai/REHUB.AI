@@ -61,6 +61,14 @@ export interface Facility {
   roomCount: number;
   teamName: string;
   createdAt: string;
+  /** Optional real location, auto-filled from the CMS directory. */
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  phone?: string;
+  /** CMS Certification Number when matched to a directory facility. */
+  ccn?: string;
 }
 
 export interface Room {
