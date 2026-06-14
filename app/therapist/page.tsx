@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { SiteNav, SiteFooter } from "@/components/SiteNav";
+import AppNav from "@/components/AppNav";
+import { SiteFooter } from "@/components/SiteNav";
 import StaffDashboard from "@/components/StaffDashboard";
 import type { FacilityWorkspace } from "@/lib/types";
 import { getStore } from "@/lib/store";
 import { DEMO_FACILITY } from "@/lib/mockData";
-import {
-  clearTherapistSession,
-  getTherapistSession,
-} from "@/lib/session";
+import { clearTherapistSession, getTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
 export default function TherapistPage() {
@@ -21,9 +19,8 @@ export default function TherapistPage() {
   if (!mounted) {
     return (
       <>
-        <SiteNav />
+        <AppNav />
         <main className="flex-1" />
-        <SiteFooter />
       </>
     );
   }
@@ -31,12 +28,10 @@ export default function TherapistPage() {
   const session = getTherapistSession();
   const store = getStore();
 
-  // Allow a frictionless demo: if unpaired, fall back to the demo facility.
   const facilityId = session?.facilityId ?? DEMO_FACILITY.id;
   const therapistName = session?.name ?? "Care Team";
   const full = store.getWorkspace(facilityId);
 
-  // Filter to assigned rooms when the therapist isn't covering "all".
   const assigned = session?.assignedRooms ?? "all";
   const workspace: FacilityWorkspace =
     assigned === "all"
@@ -49,21 +44,22 @@ export default function TherapistPage() {
 
   return (
     <>
-      <SiteNav />
-      <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-          <header className="flex flex-wrap items-start justify-between gap-3">
+      <AppNav
+        facilityName={full.facility.name}
+        userName={therapistName}
+      />
+      <main className="flex-1 bg-offwhite">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+
+          {/* Page header */}
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-gray-muted bg-white p-4 shadow-soft sm:p-5">
             <div>
-              <h1 className="text-2xl font-bold text-navy">Therapist Dashboard</h1>
-              <p className="mt-1 text-slate">
-                {full.facility.name} ·{" "}
-                <span className="font-medium text-teal">
-                  Connected to facility network
-                </span>
-              </p>
+              <h1 className="text-xl font-bold text-navy">Therapist Dashboard</h1>
               <p className="mt-0.5 text-sm text-slate/70">
-                Signed in as {therapistName}
-                {session ? ` · ${session.role}` : " (demo)"}
+                {full.facility.name}
+                {session ? ` · ${therapistName} · ${session.role}` : " · Demo mode"}
+                {" · "}
+                <span className="font-medium text-teal">● Live</span>
               </p>
             </div>
             <div className="flex gap-2">
@@ -89,15 +85,13 @@ export default function TherapistPage() {
                 </button>
               )}
             </div>
-          </header>
-
-          <div className="mt-6">
-            <StaffDashboard
-              workspace={workspace}
-              facilityId={facilityId}
-              therapistName={therapistName}
-            />
           </div>
+
+          <StaffDashboard
+            workspace={workspace}
+            facilityId={facilityId}
+            therapistName={therapistName}
+          />
         </div>
       </main>
       <SiteFooter />

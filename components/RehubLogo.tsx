@@ -37,15 +37,18 @@ export function RehubMark({ size = 28 }: { size?: number }) {
 export function RehubWordmark({
   size = "default",
 }: {
-  size?: "default" | "large";
+  size?: "default" | "large" | "sm";
 }) {
+  const markSize = size === "large" ? 34 : size === "sm" ? 22 : 28;
   const textClass =
     size === "large"
       ? "text-xl font-bold tracking-tight text-navy"
-      : "text-lg font-bold tracking-tight text-navy";
+      : size === "sm"
+        ? "text-base font-bold tracking-tight text-navy"
+        : "text-lg font-bold tracking-tight text-navy";
   return (
-    <span className="flex items-center gap-2.5">
-      <RehubMark size={size === "large" ? 34 : 28} />
+    <span className="flex items-center gap-2">
+      <RehubMark size={markSize} />
       <span className={textClass}>
         rehub<span className="text-teal">.ai</span>
       </span>

@@ -1,34 +1,42 @@
 "use client";
 
-import { SiteNav, SiteFooter } from "@/components/SiteNav";
+import AppNav from "@/components/AppNav";
+import { SiteFooter } from "@/components/SiteNav";
 import AdminAnalytics from "@/components/AdminAnalytics";
 import { DEMO_FACILITY } from "@/lib/mockData";
-import { useMounted, useWorkspace } from "@/lib/useRehub";
+import { getStore } from "@/lib/store";
+import { getTherapistSession } from "@/lib/session";
+import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
 export default function AdminPage() {
   const mounted = useMounted();
-  const workspace = useWorkspace(DEMO_FACILITY.id);
+  useStoreVersion();
+
+  if (!mounted) {
+    return (
+      <>
+        <AppNav />
+        <main className="flex-1 bg-offwhite" />
+      </>
+    );
+  }
+
+  const session = getTherapistSession();
+  const facilityId = session?.facilityId ?? DEMO_FACILITY.id;
+  const workspace = getStore().getWorkspace(facilityId);
 
   return (
     <>
-      <SiteNav />
-      <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-          <header>
-            <h1 className="text-2xl font-bold text-navy">Admin Analytics</h1>
-            <p className="mt-1 text-slate">
-              Understand response trends, care workflow patterns, and request
-              volume.
+      <AppNav facilityName={workspace.facility.name} userName={session?.name} />
+      <main className="flex-1 bg-offwhite">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+          <div className="mb-6 rounded-xl border border-gray-muted bg-white p-4 shadow-soft sm:p-5">
+            <h1 className="text-xl font-bold text-navy">Analytics</h1>
+            <p className="mt-0.5 text-sm text-slate/70">
+              {workspace.facility.name} · Response trends, request volume, and workflow metrics
             </p>
-          </header>
-
-          <div className="mt-6">
-            {mounted ? (
-              <AdminAnalytics requests={workspace.requests} />
-            ) : (
-              <div className="h-96 animate-pulse rounded-xl border border-gray-muted bg-white" />
-            )}
           </div>
+          <AdminAnalytics requests={workspace.requests} />
         </div>
       </main>
       <SiteFooter />

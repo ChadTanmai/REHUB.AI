@@ -7,10 +7,11 @@ import { RehubWordmark } from "@/components/RehubLogo";
 import { EASE } from "./motion";
 
 const LINKS = [
-  { href: "/#how", label: "How it works" },
+  { href: "/for-facilities", label: "For facilities" },
   { href: "/#product", label: "Product" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/contact", label: "Contact sales" },
+  { href: "/demo", label: "Live demo" },
+  { href: "/about", label: "About" },
 ];
 
 export default function MarketingNav() {

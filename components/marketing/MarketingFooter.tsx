@@ -21,8 +21,9 @@ const COLUMNS = [
     ],
   },
   {
-    title: "Company",
+    title: "Resources",
     links: [
+      { href: "/for-facilities", label: "For facilities" },
       { href: "/about", label: "About" },
       { href: "/contact", label: "Contact sales" },
     ],
