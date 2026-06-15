@@ -61,16 +61,16 @@ export default function MarketingNav() {
             Live demo
           </Link>
           <Link
-            href="/therapist"
+            href="/auth/signin"
             className="rounded-lg border border-gray-muted bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-offwhite"
           >
             Sign in
           </Link>
           <Link
-            href="/contact"
+            href="/auth/signup"
             className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white shadow-soft transition-all hover:bg-[#0c2030] hover:shadow-panel"
           >
-            Request demo
+            Get started
           </Link>
         </div>
 
@@ -122,18 +122,18 @@ export default function MarketingNav() {
               </Link>
               <div className="flex gap-2 pt-3">
                 <Link
-                  href="/therapist"
+                  href="/auth/signin"
                   onClick={() => setOpen(false)}
                   className="flex-1 rounded-lg border border-gray-muted bg-white px-4 py-2.5 text-center text-sm font-semibold text-navy"
                 >
                   Sign in
                 </Link>
                 <Link
-                  href="/contact"
+                  href="/auth/signup"
                   onClick={() => setOpen(false)}
                   className="flex-1 rounded-lg bg-navy px-4 py-2.5 text-center text-sm font-semibold text-white"
                 >
-                  Request demo
+                  Get started
                 </Link>
               </div>
             </div>
