@@ -1,10 +1,10 @@
 import type { Status } from "@/lib/types";
 
 const STYLES: Record<Status, string> = {
-  New: "bg-navy/8 text-navy border-navy/20",
-  Acknowledged: "bg-teal/10 text-teal border-teal/30",
-  "In Progress": "bg-amber/15 text-[#9a6b00] border-amber/40",
-  Resolved: "bg-success/12 text-success border-success/30",
+  New: "bg-slate/8 text-slate border-slate/20",
+  Acknowledged: "bg-slate/8 text-slate border-slate/20",
+  "In Progress": "bg-slate/8 text-slate border-slate/20",
+  Resolved: "bg-slate/8 text-slate border-slate/20",
 };
 
 export default function StatusBadge({ status }: { status: Status }) {
