@@ -52,6 +52,7 @@ import {
   dbUpdateRequestStatus,
   dbInsertEvent,
 } from "./db";
+import { pushSnapshot } from "./networkSync";
 
 const STORAGE_PREFIX = "rehub:facility:";
 const CHANNEL_NAME = "rehub-sync";
@@ -118,9 +119,12 @@ class RehubStore {
     if (broadcast && this.channel) {
       this.channel.postMessage({ facilityId });
     }
+    // Push to the network sync server so other devices on the same WiFi
+    // receive the update via SSE (fire-and-forget).
+    if (broadcast) pushSnapshot(facilityId, ws);
   }
 
-  private reloadFromStorage(facilityId: string) {
+  reloadFromStorage(facilityId: string) {
     if (typeof window === "undefined") return;
     try {
       const raw = localStorage.getItem(storageKey(facilityId));
