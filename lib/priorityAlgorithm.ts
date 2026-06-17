@@ -90,6 +90,27 @@ export interface ScoreContext {
   recentUnresolvedCount?: number;
 }
 
+/** Words that negate the keyword immediately following them. */
+const NEGATORS = ["no ", "not ", "don't ", "dont ", "without ", "no more "];
+
+/**
+ * True if `phrase` appears in `text` preceded (within 12 chars) by a negator,
+ * e.g. "no pain", "not bleeding". Prevents false-positive urgency.
+ */
+function isNegated(text: string, phrase: string): boolean {
+  let idx = text.indexOf(phrase);
+  while (idx !== -1) {
+    const window = text.slice(Math.max(0, idx - 12), idx);
+    if (NEGATORS.some((n) => window.includes(n))) {
+      // This occurrence is negated; check if another, non-negated one exists.
+      idx = text.indexOf(phrase, idx + phrase.length);
+    } else {
+      return false; // found a non-negated occurrence
+    }
+  }
+  return true; // every occurrence was negated
+}
+
 function scanKeywords(
   text: string,
   table: Record<string, number>,
@@ -97,7 +118,7 @@ function scanKeywords(
   let bonus = 0;
   const matched: string[] = [];
   for (const [phrase, weight] of Object.entries(table)) {
-    if (text.includes(phrase)) {
+    if (text.includes(phrase) && !isNegated(text, phrase)) {
       bonus += weight;
       matched.push(phrase);
     }
@@ -156,10 +177,21 @@ export function scoreToPriority(score: number): Priority {
 }
 
 /**
- * Display score adds a time-waiting modifier (+5 per 10 minutes waiting).
- * This nudges queue ordering without changing the originally detected label.
+ * Display score adds a NON-LINEAR time-waiting escalator: the longer a request
+ * waits unanswered, the faster its urgency climbs. This models real triage —
+ * a routine request ignored for 40 minutes deserves attention.
+ *
+ *   timeBonus = ESCALATION_RATE × waitingMinutes^1.35
+ *
+ * The exponent (>1) makes the curve accelerate. We cap the bonus so a very old
+ * routine request can surface above fresh important ones, but a fresh Urgent
+ * still outranks an old Routine within reason.
  */
+const ESCALATION_RATE = 0.9;
+const MAX_TIME_BONUS = 60;
+
 export function displayScore(baseScore: number, waitingMinutes: number): number {
-  const timeBonus = Math.floor(waitingMinutes / 10) * 5;
+  const raw = ESCALATION_RATE * Math.pow(Math.max(0, waitingMinutes), 1.35);
+  const timeBonus = Math.min(MAX_TIME_BONUS, Math.round(raw));
   return baseScore + timeBonus;
 }
