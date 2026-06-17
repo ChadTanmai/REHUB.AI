@@ -47,16 +47,16 @@ export default function Hero() {
 
             <motion.div variants={item} className="mt-8 flex flex-wrap gap-3">
               <Link
-                href="/contact"
+                href="/demo"
                 className="rounded-lg bg-navy px-6 py-3 text-base font-semibold text-white shadow-soft transition-all hover:bg-[#0c2030] hover:shadow-panel"
               >
-                Request a demo
+                Try the live demo
               </Link>
               <Link
-                href="/demo"
+                href="/auth/signup"
                 className="rounded-lg border border-gray-muted bg-white px-6 py-3 text-base font-semibold text-navy transition-colors hover:bg-offwhite"
               >
-                See it live
+                Get started
               </Link>
             </motion.div>
 

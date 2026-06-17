@@ -234,10 +234,10 @@ export default function Home() {
                     Self-serve setup
                   </Link>
                   <Link
-                    href="/demo-v2"
+                    href="/demo"
                     className="text-center text-sm font-medium text-teal hover:underline"
                   >
-                    Or explore the live demo →
+                    Or try the live demo →
                   </Link>
                 </div>
               </div>
