@@ -26,6 +26,8 @@ const COLUMNS = [
       { href: "/for-facilities", label: "For facilities" },
       { href: "/about", label: "About" },
       { href: "/contact", label: "Contact sales" },
+      { href: "/privacy", label: "Privacy policy" },
+      { href: "/terms", label: "Terms of service" },
     ],
   },
 ];
