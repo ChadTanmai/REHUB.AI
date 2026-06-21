@@ -55,12 +55,9 @@ export default function DemoPage() {
   function handleStart() {
     const store = getStore();
     const facilityCode = randomCode();
-    const facility = store.createFacility({
-      name: "Demo Facility",
-      facilityCode,
-      roomCount: 1,
-      teamName: "Care Team",
-    });
+    // createDemoFacility stores under DEMO_PREFIX and auto-expires after 2 hours.
+    // It is never pushed to Supabase or network sync.
+    const facility = store.createDemoFacility({ name: "Demo Facility", facilityCode });
     store.addRoom(facility.id, { roomNumber: "101", displayName: "Room 101" });
     setCreatedCode(facilityCode);
     setCreatedId(facility.id);

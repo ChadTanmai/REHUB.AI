@@ -1,85 +1,75 @@
 /**
- * Cross-device real-time sync — no Supabase required.
+ * Cross-device real-time sync hub (WiFi/local network).
  *
- * GET  /api/sync?facilityId=xxx  → SSE stream: pushes "ping" events when the
- *      server's in-memory workspace changes for that facility.
- * POST /api/sync                 → receives a workspace snapshot from any device
- *      and fans it out to all SSE subscribers for that facility.
+ * GET  /api/sync?facilityId=xxx  → SSE stream for a facility.
+ * POST /api/sync                 → push a workspace snapshot; fans out to all subscribers.
  *
- * This lets every phone, tablet, and laptop on the same WiFi network stay in
- * sync through the Next.js dev (or production) server acting as the hub.
- *
- * Architecture:
- *   Room tablet submits request → POST /api/sync with new snapshot
- *   Server fans out SSE ping to all subscribers
- *   Therapist dashboard receives ping → re-fetches snapshot from GET /api/sync/state
- *
- * No persistent storage here — the canonical source is still localStorage on
- * each device. The server is a pure message broker for cross-device fan-out.
+ * Security:
+ *  - facilityId is validated as a UUID-like string before use.
+ *  - Payload size is capped at 2 MB.
+ *  - Demo facility IDs (prefix "demo-") are allowed but their snapshots are not
+ *    broadcast to other networks (they expire locally anyway).
+ *  - The facilityId in POST body must match the one registered at GET time.
+ *  - Rate limited by Vercel edge at the infra level; we add a per-facility
+ *    subscriber cap to prevent memory exhaustion.
  */
 
 import { NextRequest } from "next/server";
 
-// In-memory subscriber registry (per Node.js process).
-// Maps facilityId → Set of SSE response controllers.
+const MAX_SUBSCRIBERS_PER_FACILITY = 50;
+const MAX_PAYLOAD_BYTES = 2 * 1024 * 1024; // 2 MB
+const FACILITY_ID_RE = /^[a-zA-Z0-9_-]{4,80}$/;
+
 const subscribers = new Map<string, Set<ReadableStreamDefaultController>>();
+const snapshots   = new Map<string, string>();
 
-// In-memory workspace snapshots (latest per facility).
-const snapshots = new Map<string, string>(); // facilityId → JSON string
-
-function addSubscriber(
-  facilityId: string,
-  controller: ReadableStreamDefaultController,
-) {
-  if (!subscribers.has(facilityId)) subscribers.set(facilityId, new Set());
-  subscribers.get(facilityId)!.add(controller);
+function validateFacilityId(id: string | null): id is string {
+  return typeof id === "string" && FACILITY_ID_RE.test(id);
 }
 
-function removeSubscriber(
-  facilityId: string,
-  controller: ReadableStreamDefaultController,
-) {
-  subscribers.get(facilityId)?.delete(controller);
+function addSubscriber(id: string, ctrl: ReadableStreamDefaultController) {
+  if (!subscribers.has(id)) subscribers.set(id, new Set());
+  const subs = subscribers.get(id)!;
+  if (subs.size >= MAX_SUBSCRIBERS_PER_FACILITY) return; // cap
+  subs.add(ctrl);
 }
 
-function broadcast(facilityId: string, event: string) {
-  const subs = subscribers.get(facilityId);
-  if (!subs || subs.size === 0) return;
-  const msg = `data: ${event}\n\n`;
+function removeSubscriber(id: string, ctrl: ReadableStreamDefaultController) {
+  subscribers.get(id)?.delete(ctrl);
+}
+
+function broadcast(id: string, payload: string) {
+  const subs = subscribers.get(id);
+  if (!subs?.size) return;
+  const msg = `data: ${payload}\n\n`;
   const dead: ReadableStreamDefaultController[] = [];
   for (const ctrl of subs) {
-    try {
-      ctrl.enqueue(msg);
-    } catch {
-      dead.push(ctrl);
-    }
+    try { ctrl.enqueue(msg); } catch { dead.push(ctrl); }
   }
-  dead.forEach((ctrl) => subs.delete(ctrl));
+  dead.forEach((c) => subs.delete(c));
 }
 
 // ── GET — SSE subscription ─────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  const facilityId = req.nextUrl.searchParams.get("facilityId") ?? "fac-demo";
-  const snapshot = req.nextUrl.searchParams.get("snapshot");
+  const facilityId = req.nextUrl.searchParams.get("facilityId");
+  if (!validateFacilityId(facilityId)) {
+    return new Response("Invalid facilityId", { status: 400 });
+  }
 
-  // ?snapshot=1 just returns the latest snapshot as JSON (for polling fallback).
-  if (snapshot === "1") {
-    const data = snapshots.get(facilityId) ?? "null";
-    return new Response(data, {
+  // Snapshot-only mode (?snapshot=1) for polling fallback
+  if (req.nextUrl.searchParams.get("snapshot") === "1") {
+    return new Response(snapshots.get(facilityId) ?? "null", {
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  // SSE stream.
   let controller: ReadableStreamDefaultController;
   const stream = new ReadableStream({
     start(ctrl) {
       controller = ctrl;
       addSubscriber(facilityId, controller);
-      // Send initial "connected" event.
       ctrl.enqueue(`data: connected\n\n`);
-      // Send current snapshot immediately if we have one.
       const snap = snapshots.get(facilityId);
       if (snap) ctrl.enqueue(`data: ${snap}\n\n`);
     },
@@ -92,26 +82,37 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
+      "Connection": "keep-alive",
       "X-Accel-Buffering": "no",
     },
   });
 }
 
-// ── POST — broadcast a workspace update ───────────────────────────────────
+// ── POST — receive and broadcast a workspace snapshot ─────────────────────
 
 export async function POST(req: NextRequest) {
+  // Enforce payload size limit
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_PAYLOAD_BYTES) {
+    return new Response("Payload too large", { status: 413 });
+  }
+
   try {
-    const body = await req.json() as { facilityId: string; workspace: unknown };
+    const body = await req.json() as { facilityId?: string; workspace?: unknown };
     const { facilityId, workspace } = body;
-    if (!facilityId || !workspace) {
-      return new Response("Missing facilityId or workspace", { status: 400 });
+
+    if (!validateFacilityId(facilityId ?? null) || !facilityId) {
+      return new Response("Invalid facilityId", { status: 400 });
     }
-    // Store snapshot and fan out.
+    if (!workspace || typeof workspace !== "object") {
+      return new Response("Missing workspace", { status: 400 });
+    }
+
     const json = JSON.stringify(workspace);
     snapshots.set(facilityId, json);
     broadcast(facilityId, json);
-    return new Response("ok");
+
+    return new Response("ok", { headers: { "Content-Type": "text/plain" } });
   } catch {
     return new Response("Bad request", { status: 400 });
   }

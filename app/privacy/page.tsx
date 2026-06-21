@@ -2,104 +2,123 @@ import Link from "next/link";
 import MarketingNav from "@/components/marketing/MarketingNav";
 import MarketingFooter from "@/components/marketing/MarketingFooter";
 
-export const metadata = { title: "Privacy Policy – Rehub" };
+export const metadata = {
+  title: "Privacy Policy – Rehub",
+  description: "How Rehub collects, uses, and protects your data.",
+};
+
+const UPDATED = "June 21, 2026";
+const CONTACT = "privacy@rehub.ai";
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-bold text-navy">{title}</h2>
+      <div className="mt-3 space-y-3 text-sm leading-relaxed text-slate">{children}</div>
+    </section>
+  );
+}
 
 export default function PrivacyPage() {
   return (
     <>
       <MarketingNav />
-      <main className="flex-1 bg-offwhite">
-        <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
+      <main className="flex-1 bg-white">
+        <div className="mx-auto max-w-3xl px-5 py-16 sm:px-6">
           <p className="text-xs font-semibold uppercase tracking-widest text-teal">Legal</p>
           <h1 className="mt-2 text-3xl font-bold text-navy">Privacy Policy</h1>
-          <p className="mt-2 text-sm text-slate/60">Last updated: June 2026</p>
+          <p className="mt-2 text-sm text-slate/60">Last updated: {UPDATED}</p>
 
-          <div className="prose-rehub mt-10 space-y-10">
-            <Section title="Who we are">
-              <p>Rehub (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) provides a care communication and workflow platform for rehabilitation facilities. Our platform connects patient room screens to care team dashboards to improve response times and visibility of care requests.</p>
-            </Section>
+          <p className="mt-6 text-sm leading-relaxed text-slate">
+            Rehub (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) operates a care
+            communication and workflow platform for rehabilitation facilities. This Privacy Policy
+            explains how we collect, use, and protect information about facility administrators,
+            care team members, and the devices used in patient rooms.
+          </p>
 
-            <Section title="What data we collect">
-              <p>We collect only what is necessary to operate the platform:</p>
-              <ul>
-                <li><strong>Account data:</strong> email address, full name, facility name, and role — provided when you sign up.</li>
-                <li><strong>Facility data:</strong> facility name, join code, room numbers, and care team member names entered during setup.</li>
-                <li><strong>Request data:</strong> care request text, type, priority, timestamps, and status transitions entered by facility staff or room screens.</li>
-                <li><strong>Usage data:</strong> page views, feature interactions, and device type — collected to improve the product.</li>
-              </ul>
-              <p>We do <strong>not</strong> collect or store actual patient health records, diagnoses, medications, insurance information, or any data considered Protected Health Information (PHI) under HIPAA. Rehub is a communication coordination tool, not a medical records system.</p>
-            </Section>
+          <Section title="1. What we collect">
+            <p><strong>Account information:</strong> When a facility director creates an account we
+            collect their name, work email address, and facility name.</p>
+            <p><strong>Facility configuration:</strong> Room numbers, display names, team member
+            names, and roles set up during onboarding.</p>
+            <p><strong>Request data:</strong> Text entered or spoken by residents into room screens,
+            including the auto-classified type, priority score, and timestamps. This is operational
+            workflow data — not medical records.</p>
+            <p><strong>Usage data:</strong> Page views, feature interactions, and error logs used
+            to improve the platform. We do not sell this data.</p>
+            <p><strong>We do not collect:</strong> Medical diagnoses, treatment plans, insurance
+            information, Social Security numbers, financial data, or any data considered Protected
+            Health Information (PHI) under HIPAA. Rehub is a communication workflow tool, not a
+            medical records system.</p>
+          </Section>
 
-            <Section title="How we use your data">
-              <ul>
-                <li>To operate the platform and deliver care communication features</li>
-                <li>To authenticate users and maintain secure sessions</li>
-                <li>To sync request queues across authorized devices in real time</li>
-                <li>To provide analytics on response times and request volume within your facility</li>
-                <li>To send transactional emails (email verification, password reset)</li>
-                <li>To improve the product and fix issues</li>
-              </ul>
-              <p>We do <strong>not</strong> sell your data. We do not use facility or care request data for advertising.</p>
-            </Section>
+          <Section title="2. How we use it">
+            <p>To operate the platform — routing requests from room screens to care team dashboards.</p>
+            <p>To send email verification and account management messages.</p>
+            <p>To analyze aggregate usage patterns (anonymized) for product improvement.</p>
+            <p>We never sell, rent, or share individual facility data with third parties for
+            marketing purposes.</p>
+          </Section>
 
-            <Section title="Data storage and security">
-              <p>Data is stored in Supabase (PostgreSQL) hosted on AWS infrastructure in the United States. Data is encrypted at rest and in transit (TLS 1.2+). Access is controlled via row-level security — each facility can only access its own data.</p>
-              <p>We implement industry-standard security practices including environment variable isolation, secure session management, and sanitized input handling. All request text is sanitized before storage.</p>
-            </Section>
+          <Section title="3. Data isolation">
+            <p>Each facility&rsquo;s data is isolated by a unique facility identifier with
+            row-level security enforced at the database level. A user from one facility cannot
+            access another facility&rsquo;s data through the application or API.</p>
+            <p>Demo session data is stored locally in your browser and expires automatically after
+            2 hours. It is never transmitted to our servers.</p>
+          </Section>
 
-            <Section title="Data sharing">
-              <p>We share data only with:</p>
-              <ul>
-                <li><strong>Supabase:</strong> database and authentication infrastructure provider</li>
-                <li><strong>Vercel:</strong> hosting and deployment provider</li>
-              </ul>
-              <p>We do not share your data with any other third parties. We will disclose data if required by law.</p>
-            </Section>
+          <Section title="4. Data storage and security">
+            <p>Production data is stored in Supabase (PostgreSQL), hosted on AWS infrastructure
+            with encryption at rest and in transit (TLS 1.2+).</p>
+            <p>We apply security headers (HSTS, CSP, X-Frame-Options) to every response.
+            Authentication is handled by Supabase Auth with hashed passwords and optional
+            two-factor authentication.</p>
+            <p>Audit logs record every status transition on care requests so facility
+            administrators can review activity.</p>
+          </Section>
 
-            <Section title="Your rights">
-              <p>You may request:</p>
-              <ul>
-                <li>A copy of the data we hold about you</li>
-                <li>Correction of inaccurate data</li>
-                <li>Deletion of your account and associated data</li>
-              </ul>
-              <p>Contact us at <a href="mailto:privacy@rehub.ai" className="text-teal hover:underline">privacy@rehub.ai</a> for any data requests. We respond within 30 days.</p>
-            </Section>
+          <Section title="5. Data retention">
+            <p>Request history is retained for 12 months from the date of creation, then
+            automatically deleted unless a longer retention period is required by your
+            facility&rsquo;s policies.</p>
+            <p>Account data is retained for as long as the account is active. You may request
+            deletion at any time.</p>
+          </Section>
 
-            <Section title="Cookies and local storage">
-              <p>We use browser localStorage to store device session information (which facility and room a device is paired to). We use cookies only for authentication session management via Supabase Auth. We do not use third-party tracking cookies or advertising cookies.</p>
-            </Section>
+          <Section title="6. HIPAA notice">
+            <p>Rehub is a <strong>care coordination and communication tool, not a medical records
+            system.</strong> The platform does not store Protected Health Information (PHI) as
+            defined under HIPAA. Residents&rsquo; requests are operational workflow notes, not
+            clinical records.</p>
+            <p>If your facility requires a Business Associate Agreement (BAA) for HIPAA compliance,
+            please contact us. BAAs are available to facilities on our Enterprise plan.</p>
+          </Section>
 
-            <Section title="HIPAA notice">
-              <p>Rehub is not a HIPAA-covered entity under its current configuration. The platform is designed to coordinate care communication — not to store or process protected health information. Facilities operating under HIPAA should not enter patient names, diagnoses, or medical details into Rehub request fields. We offer Business Associate Agreements (BAA) for enterprise customers on request.</p>
-            </Section>
+          <Section title="7. Cookies">
+            <p>We use session cookies required for authentication (Supabase Auth). We do not use
+            advertising, tracking, or cross-site cookies.</p>
+          </Section>
 
-            <Section title="Changes to this policy">
-              <p>We may update this policy as the platform evolves. We will notify registered account holders of material changes via email. The &quot;last updated&quot; date at the top of this page reflects the most recent revision.</p>
-            </Section>
+          <Section title="8. Your rights">
+            <p>You may request a copy of, correction to, or deletion of your account data at any
+            time by emailing <a href={`mailto:${CONTACT}`} className="text-teal hover:underline">{CONTACT}</a>.</p>
+            <p>Facility administrators can export all request history via the Analytics page as CSV.</p>
+          </Section>
 
-            <Section title="Contact">
-              <p>Questions about this policy: <a href="mailto:privacy@rehub.ai" className="text-teal hover:underline">privacy@rehub.ai</a></p>
-            </Section>
-          </div>
+          <Section title="9. Changes to this policy">
+            <p>We will notify facility administrators by email at least 14 days before any material
+            changes to this policy take effect.</p>
+          </Section>
 
-          <div className="mt-12 border-t border-gray-muted pt-6">
-            <Link href="/terms" className="text-sm font-medium text-teal hover:underline">
-              View Terms of Service →
-            </Link>
-          </div>
+          <Section title="10. Contact">
+            <p>
+              Questions about this policy: <a href={`mailto:${CONTACT}`} className="text-teal hover:underline">{CONTACT}</a>
+            </p>
+          </Section>
         </div>
       </main>
       <MarketingFooter />
     </>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h2 className="text-lg font-semibold text-navy">{title}</h2>
-      <div className="mt-3 space-y-3 text-sm leading-relaxed text-slate/80">{children}</div>
-    </div>
   );
 }
