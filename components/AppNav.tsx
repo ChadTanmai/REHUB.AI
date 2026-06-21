@@ -11,10 +11,10 @@ import { RehubWordmark } from "@/components/RehubLogo";
  */
 
 const NAV_ITEMS = [
-  { href: "/therapist", label: "Dashboard" },
+  { href: "/dashboard", label: "Home" },
+  { href: "/therapist", label: "Care queue" },
   { href: "/facility", label: "Facility" },
   { href: "/admin", label: "Analytics" },
-  { href: "/setup", label: "Setup" },
 ];
 
 export default function AppNav({

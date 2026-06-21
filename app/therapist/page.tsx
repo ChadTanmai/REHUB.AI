@@ -1,39 +1,51 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import AppNav from "@/components/AppNav";
 import { SiteFooter } from "@/components/SiteNav";
 import StaffDashboard from "@/components/StaffDashboard";
-import type { FacilityWorkspace } from "@/lib/types";
+import EmptyState from "@/components/EmptyState";
 import { getStore } from "@/lib/store";
-import { DEMO_FACILITY } from "@/lib/mockData";
-import { clearTherapistSession, getTherapistSession } from "@/lib/session";
-import { useMounted, useStoreVersion } from "@/lib/useRehub";
+import { getTherapistSession } from "@/lib/session";
+import { useMounted, useWorkspace, useStoreVersion } from "@/lib/useRehub";
+
+function PeopleIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+    </svg>
+  );
+}
 
 export default function TherapistPage() {
   const mounted = useMounted();
   const router = useRouter();
   useStoreVersion();
 
+  useEffect(() => {
+    if (mounted) {
+      const session = getTherapistSession();
+      if (!session) router.replace("/dashboard");
+    }
+  }, [mounted, router]);
+
   if (!mounted) {
     return (
       <>
         <AppNav />
-        <main className="flex-1" />
+        <main className="flex-1 bg-offwhite" />
       </>
     );
   }
 
   const session = getTherapistSession();
+  if (!session) return null;
+
   const store = getStore();
-
-  const facilityId = session?.facilityId ?? DEMO_FACILITY.id;
-  const therapistName = session?.name ?? "Care Team";
-  const full = store.getWorkspace(facilityId);
-
-  const assigned = session?.assignedRooms ?? "all";
-  const workspace: FacilityWorkspace =
+  const full = store.getWorkspace(session.facilityId);
+  const assigned = session.assignedRooms;
+  const workspace =
     assigned === "all"
       ? full
       : {
@@ -44,54 +56,33 @@ export default function TherapistPage() {
 
   return (
     <>
-      <AppNav
-        facilityName={full.facility.name}
-        userName={therapistName}
-      />
+      <AppNav facilityName={full.facility.name} userName={session.name} />
       <main className="flex-1 bg-offwhite">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-
-          {/* Page header */}
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-gray-muted bg-white p-4 shadow-soft sm:p-5">
             <div>
-              <h1 className="text-xl font-bold text-navy">Therapist Dashboard</h1>
+              <h1 className="text-xl font-bold text-navy">Dashboard</h1>
               <p className="mt-0.5 text-sm text-slate/70">
-                {full.facility.name}
-                {session ? ` · ${therapistName} · ${session.role}` : " · Demo mode"}
-                {" · "}
+                {full.facility.name} · {session.name} · {session.role} ·{" "}
                 <span className="font-medium text-teal">● Live</span>
               </p>
             </div>
-            <div className="flex gap-2">
-              {!session && (
-                <Link
-                  href="/setup/therapist"
-                  className="rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white hover:bg-[#2a8d8d]"
-                >
-                  Pair this device
-                </Link>
-              )}
-              {session && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearTherapistSession();
-                    router.refresh();
-                    location.reload();
-                  }}
-                  className="rounded-lg border border-gray-muted bg-white px-4 py-2 text-sm font-medium text-slate hover:bg-offwhite"
-                >
-                  Sign out
-                </button>
-              )}
-            </div>
           </div>
 
-          <StaffDashboard
-            workspace={workspace}
-            facilityId={facilityId}
-            therapistName={therapistName}
-          />
+          {workspace.rooms.length === 0 ? (
+            <EmptyState
+              icon={<PeopleIcon />}
+              title="No rooms connected yet"
+              description="Share the patient room join link with room devices to start receiving care requests."
+              action={{ label: "Go to facility setup", href: "/facility" }}
+            />
+          ) : (
+            <StaffDashboard
+              workspace={workspace}
+              facilityId={session.facilityId}
+              therapistName={session.name}
+            />
+          )}
         </div>
       </main>
       <SiteFooter />

@@ -5,10 +5,11 @@ import { NextResponse, type NextRequest } from "next/server";
  * Auth + role middleware.
  *
  * Route protection rules:
- *   /auth/*          → redirect to /facility if already signed in
+ *   /auth/*          → redirect to /dashboard if already signed in
  *   /therapist       → requires auth (care team only)
  *   /admin           → requires auth (director/admin only)
  *   /facility        → requires auth
+ *   /dashboard       → requires auth
  *   /onboarding      → requires auth
  *   /room/*          → public (patient room devices don't have accounts)
  *   /join            → public (invite link landing page)
@@ -19,7 +20,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * can be evaluated without creating an account.
  */
 
-const STAFF_ROUTES   = ["/therapist", "/admin", "/facility", "/onboarding"];
+const STAFF_ROUTES   = ["/therapist", "/admin", "/facility", "/onboarding", "/dashboard"];
 const AUTH_PAGES     = ["/auth/signin", "/auth/signup", "/auth/verify-email", "/auth/reset-password"];
 
 const SUPABASE_ENABLED =
@@ -53,7 +54,7 @@ export async function middleware(request: NextRequest) {
 
   // Signed-in users don't need to see auth pages
   if (user && AUTH_PAGES.some((p) => pathname.startsWith(p))) {
-    return NextResponse.redirect(new URL("/facility", request.url));
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   // Staff/director routes require authentication

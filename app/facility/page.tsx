@@ -4,16 +4,22 @@ import { useState } from "react";
 import AppNav from "@/components/AppNav";
 import { SiteFooter } from "@/components/SiteNav";
 import RoomGrid from "@/components/RoomGrid";
-import { DEMO_FACILITY } from "@/lib/mockData";
-import { getRoomSession, getTherapistSession } from "@/lib/session";
+import { getTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import { getStore } from "@/lib/store";
 import { isActive } from "@/lib/requestUtils";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function FacilityPage() {
   const mounted = useMounted();
   useStoreVersion();
+  const router = useRouter();
   const [copied, setCopied] = useState<"nurse" | "patient" | null>(null);
+
+  useEffect(() => {
+    if (mounted && !getTherapistSession()) router.replace("/dashboard");
+  }, [mounted, router]);
 
   if (!mounted) {
     return (
@@ -26,9 +32,9 @@ export default function FacilityPage() {
   }
 
   const therapistSession = getTherapistSession();
-  const roomSession = getRoomSession();
-  const facilityId = (therapistSession ?? roomSession)?.facilityId ?? DEMO_FACILITY.id;
-  const userName = therapistSession?.name;
+  if (!therapistSession) return null;
+  const facilityId = therapistSession.facilityId;
+  const userName = therapistSession.name;
   const ws = getStore().getWorkspace(facilityId);
   const active = ws.requests.filter(isActive);
 
