@@ -1,17 +1,5 @@
 "use client";
 
-/**
- * Global authentication context.
- *
- * Wraps the entire app so every page — marketing, dashboard, profile —
- * knows whether the user is signed in. Subscribes to Supabase auth state
- * changes so session updates (sign in, sign out, token refresh, new tab)
- * propagate everywhere instantly.
- *
- * When Supabase is not configured (local dev without env vars), the context
- * reports "not signed in, not loading" so the marketing site still works.
- */
-
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getAuthClient } from "./supabase-browser";
@@ -24,7 +12,9 @@ export interface AuthProfile {
   fullName: string;
   displayName: string;
   email: string;
+  facilityId: string | null;
   facilityName: string;
+  facilityCode: string | null;
   role: string;
   avatarUrl: string | null;
 }
@@ -57,7 +47,9 @@ function profileFromUser(user: User | null): AuthProfile | null {
     fullName,
     displayName: meta.display_name ?? meta.nickname ?? fullName,
     email: user.email ?? "",
+    facilityId: meta.facility_id ?? null,
     facilityName: meta.facility_name ?? "",
+    facilityCode: meta.facility_code ?? null,
     role: meta.role ?? "facility_director",
     avatarUrl: meta.avatar_url ?? meta.picture ?? null,
   };
@@ -89,9 +81,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    // Subscribe to all auth changes (sign in, sign out, token refresh).
-    // Fires across tabs because Supabase persists the session and listens
-    // for storage events.
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);

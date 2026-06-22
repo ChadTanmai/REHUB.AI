@@ -13,7 +13,6 @@ import { getStore } from "./store";
 import { subscribeToFacility } from "./supabase";
 import { subscribeToNetworkSync } from "./networkSync";
 import type { FacilityWorkspace } from "./types";
-import { DEMO_FACILITY } from "./mockData";
 
 /** Re-renders whenever the store changes (locally or via any realtime source). */
 export function useStoreVersion(): number {
@@ -47,9 +46,7 @@ export function useMounted(): boolean {
  *   2. Same-WiFi remote updates via SSE (/api/sync)
  *   3. Cross-internet remote updates via Supabase Realtime (when configured)
  */
-export function useWorkspace(
-  facilityId: string = DEMO_FACILITY.id,
-): FacilityWorkspace {
+export function useWorkspace(facilityId: string): FacilityWorkspace {
   useStoreVersion();
   const store = getStore();
 

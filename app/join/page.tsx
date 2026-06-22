@@ -93,8 +93,8 @@ function JoinFlow() {
           {status === "error" && (
             <div className="text-center">
               <p className="text-sm font-medium text-coral">{error}</p>
-              <Link href="/demo" className="mt-4 inline-block text-sm font-medium text-teal hover:underline">
-                Back to demo
+              <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-teal hover:underline">
+                Go to dashboard
               </Link>
             </div>
           )}
@@ -121,8 +121,8 @@ function JoinFlow() {
 
               <p className="mt-4 text-center text-xs text-slate/60">
                 Wrong facility?{" "}
-                <Link href="/demo" className="font-medium text-navy hover:underline">
-                  Go back
+                <Link href="/dashboard" className="font-medium text-navy hover:underline">
+                  Go to dashboard
                 </Link>
               </p>
             </div>

@@ -5,19 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SiteNav, SiteFooter } from "@/components/SiteNav";
 import { getStore } from "@/lib/store";
-import { DEMO_FACILITY_CODE } from "@/lib/mockData";
-import {
-  DEMO_DATA_NOTICE,
-  normalizeFacilityCode,
-  sanitizeField,
-} from "@/lib/security";
+import { normalizeFacilityCode, sanitizeField } from "@/lib/security";
 import { saveRoomSession } from "@/lib/session";
 import { useMounted } from "@/lib/useRehub";
 
 export default function RoomPairingPage() {
   const mounted = useMounted();
   const router = useRouter();
-  const [code, setCode] = useState(DEMO_FACILITY_CODE);
+  const [code, setCode] = useState("");
   const [roomNumber, setRoomNumber] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
@@ -61,12 +56,7 @@ export default function RoomPairingPage() {
         <div className="mx-auto max-w-md px-4 py-12 sm:px-6">
           <h1 className="text-2xl font-bold text-navy">Pair Room Device</h1>
           <p className="mt-2 text-slate">
-            Bind this screen to a room in your facility. After pairing it becomes
-            the resident&apos;s room screen.
-          </p>
-
-          <p className="mt-4 rounded-lg border border-amber/40 bg-amber/10 px-4 py-2.5 text-sm text-[#8a6300]">
-            {DEMO_DATA_NOTICE}
+            Connect this screen to a room in your facility. After pairing it becomes the resident&apos;s care request screen.
           </p>
 
           <form onSubmit={pair} className="mt-6 space-y-4 rounded-xl border border-gray-muted bg-white p-5">
@@ -75,7 +65,9 @@ export default function RoomPairingPage() {
               <input
                 value={code}
                 onChange={(e) => setCode(normalizeFacilityCode(e.target.value))}
-                className="input"
+                placeholder="e.g. MAPLE-01"
+                className="input font-mono"
+                autoFocus
               />
             </label>
             <label className="block">
@@ -89,7 +81,7 @@ export default function RoomPairingPage() {
             </label>
             <label className="block">
               <span className="mb-1 block text-sm font-medium text-slate">
-                Patient display name (optional, demo only)
+                Patient display name (optional)
               </span>
               <input
                 value={displayName}
@@ -103,7 +95,7 @@ export default function RoomPairingPage() {
 
             <button
               type="submit"
-              disabled={!mounted}
+              disabled={!mounted || !code || !roomNumber}
               className="w-full rounded-lg bg-teal px-5 py-3 font-semibold text-white hover:bg-[#2a8d8d] disabled:opacity-50"
             >
               Pair &amp; open room screen
@@ -111,9 +103,9 @@ export default function RoomPairingPage() {
           </form>
 
           <p className="mt-4 text-sm text-slate/70">
-            Need a facility code?{" "}
-            <Link href="/setup" className="font-medium text-teal underline">
-              Set up a facility
+            Need a facility code? Ask your facility administrator, or{" "}
+            <Link href="/onboarding" className="font-medium text-teal hover:underline">
+              set up a new facility
             </Link>
             .
           </p>

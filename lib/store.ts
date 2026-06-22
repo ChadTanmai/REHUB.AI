@@ -33,11 +33,7 @@ import type {
 } from "./types";
 import { classifyRequest } from "./aiClassifier";
 import { buildSummary } from "./aiSummary";
-import {
-  buildDemoWorkspace,
-  DEMO_FACILITY,
-  DEMO_FACILITY_CODE,
-} from "./mockData";
+import { DEMO_FACILITY_CODE } from "./mockData";
 import {
   canTransition,
   minutesBetween,
@@ -169,14 +165,13 @@ class RehubStore {
 
   // --- workspace lifecycle ---
 
-  /** Ensure a facility workspace exists in memory (loads storage or seeds demo). */
-  ensureFacility(facilityId: string = DEMO_FACILITY.id): FacilityWorkspace {
+  /** Ensure a facility workspace exists in memory (loads from storage). */
+  ensureFacility(facilityId: string): FacilityWorkspace {
     let ws = this.workspaces.get(facilityId);
     if (ws) return ws;
 
     if (typeof window !== "undefined") {
       try {
-        // Check regular prefix first, then demo prefix
         const raw = localStorage.getItem(storageKey(facilityId)) ??
                     localStorage.getItem(storageKey(facilityId, true));
         if (raw) {
@@ -185,44 +180,38 @@ class RehubStore {
           return ws;
         }
       } catch {
-        /* fall through to seed */
+        /* fall through */
       }
     }
 
-    // Seed the demo facility; create a thin shell for any other id.
-    ws =
-      facilityId === DEMO_FACILITY.id
-        ? buildDemoWorkspace()
-        : {
-            facility: {
-              id: facilityId,
-              name: "New Facility",
-              facilityCode: facilityId.toUpperCase(),
-              roomCount: 0,
-              teamName: "Care Team",
-              createdAt: new Date().toISOString(),
-            },
-            rooms: [],
-            therapists: [],
-            requests: [],
-            events: [],
-          };
+    ws = {
+      facility: {
+        id: facilityId,
+        name: "New Facility",
+        facilityCode: facilityId.toUpperCase(),
+        roomCount: 0,
+        teamName: "Care Team",
+        createdAt: new Date().toISOString(),
+      },
+      rooms: [],
+      therapists: [],
+      requests: [],
+      events: [],
+    };
     this.workspaces.set(facilityId, ws);
     this.persist(facilityId, false);
     return ws;
   }
 
-  getWorkspace(facilityId: string = DEMO_FACILITY.id): FacilityWorkspace {
+  getWorkspace(facilityId: string): FacilityWorkspace {
     return this.ensureFacility(facilityId);
   }
 
   /** Resolve a facility id from a (case-insensitive) facility code. */
   facilityIdForCode(code: string): string | null {
     const normalized = code.trim().toUpperCase();
-    if (normalized === DEMO_FACILITY_CODE) {
-      this.ensureFacility(DEMO_FACILITY.id);
-      return DEMO_FACILITY.id;
-    }
+    // Legacy: support old REHUB-DEMO code for backwards compat only
+    if (normalized === DEMO_FACILITY_CODE) return null;
     // Scan loaded + persisted facilities.
     for (const ws of this.workspaces.values()) {
       if (ws.facility.facilityCode.toUpperCase() === normalized) {
@@ -541,16 +530,13 @@ class RehubStore {
     return event;
   }
 
-  /** Reset a facility back to seeded demo data (used by the demo controls). */
-  resetFacility(facilityId: string = DEMO_FACILITY.id) {
-    const ws =
-      facilityId === DEMO_FACILITY.id
-        ? buildDemoWorkspace()
-        : {
-            ...this.ensureFacility(facilityId),
-            requests: [],
-            events: [],
-          };
+  /** Reset a facility's requests and events. */
+  resetFacility(facilityId: string) {
+    const ws = {
+      ...this.ensureFacility(facilityId),
+      requests: [],
+      events: [],
+    };
     this.workspaces.set(facilityId, ws);
     this.persist(facilityId);
     this.emit();

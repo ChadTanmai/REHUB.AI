@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { SiteNav, SiteFooter } from "@/components/SiteNav";
 import type { TherapistRole } from "@/lib/types";
 import { getStore } from "@/lib/store";
-import { DEMO_FACILITY_CODE } from "@/lib/mockData";
 import { normalizeFacilityCode, sanitizeField } from "@/lib/security";
 import { saveTherapistSession } from "@/lib/session";
 import { useMounted } from "@/lib/useRehub";
@@ -22,7 +21,7 @@ const ROLES: TherapistRole[] = [
 export default function TherapistPairingPage() {
   const mounted = useMounted();
   const router = useRouter();
-  const [code, setCode] = useState(DEMO_FACILITY_CODE);
+  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<TherapistRole>("Physical Therapist");
   const [error, setError] = useState("");
@@ -65,10 +64,9 @@ export default function TherapistPairingPage() {
       <SiteNav />
       <main className="flex-1">
         <div className="mx-auto max-w-md px-4 py-12 sm:px-6">
-          <h1 className="text-2xl font-bold text-navy">Therapist Sign In</h1>
+          <h1 className="text-2xl font-bold text-navy">Join Care Team</h1>
           <p className="mt-2 text-slate">
-            Join your facility&apos;s shared dashboard. You&apos;ll receive every
-            request from your assigned rooms in real time.
+            Enter your facility code and name to access the shared care team dashboard.
           </p>
 
           <form onSubmit={pair} className="mt-6 space-y-4 rounded-xl border border-gray-muted bg-white p-5">
@@ -103,11 +101,6 @@ export default function TherapistPairingPage() {
                 ))}
               </select>
             </label>
-            <p className="text-xs text-slate/60">
-              MVP uses mock pairing — no password required. Production will use
-              role-based accounts.
-            </p>
-
             {error && <p className="text-sm font-medium text-coral">{error}</p>}
 
             <button

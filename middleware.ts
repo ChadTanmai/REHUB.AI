@@ -52,8 +52,13 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Signed-in users don't need to see auth pages
+  // Signed-in users go straight to their dashboard
   if (user && AUTH_PAGES.some((p) => pathname.startsWith(p))) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // Signed-in users don't see the marketing homepage
+  if (user && pathname === "/") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

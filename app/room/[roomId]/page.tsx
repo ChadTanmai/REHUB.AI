@@ -6,7 +6,6 @@ import ResidentRequestPanel from "@/components/ResidentRequestPanel";
 import SafetyNote from "@/components/SafetyNote";
 import { Logo } from "@/components/SiteNav";
 import { getStore } from "@/lib/store";
-import { DEMO_FACILITY } from "@/lib/mockData";
 import { getRoomSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
@@ -20,28 +19,25 @@ export default function RoomScreen() {
     return <div className="min-h-screen bg-offwhite" />;
   }
 
-  // Resolve which facility owns this room: prefer the paired session.
   const session = getRoomSession();
-  const facilityId =
-    session && session.roomId === roomId ? session.facilityId : DEMO_FACILITY.id;
+  const facilityId = session?.roomId === roomId ? session.facilityId : null;
 
   const store = getStore();
-  const workspace = store.getWorkspace(facilityId);
-  const room = workspace.rooms.find((r) => r.id === roomId);
+  const workspace = facilityId ? store.getWorkspace(facilityId) : null;
+  const room = workspace?.rooms.find((r) => r.id === roomId);
 
-  if (!room) {
+  if (!room || !workspace || !facilityId) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-offwhite px-6 text-center">
         <h1 className="text-2xl font-bold text-navy">Room not paired</h1>
         <p className="max-w-md text-slate">
-          This device isn&apos;t paired to a room yet. Ask facility staff to
-          complete pairing.
+          This device isn&apos;t paired to a room yet. Ask your facility administrator for the room pairing link.
         </p>
         <Link
-          href="/setup/room"
+          href="/join"
           className="rounded-lg bg-teal px-6 py-3 font-semibold text-white hover:bg-[#2a8d8d]"
         >
-          Pair this room
+          Use pairing code
         </Link>
       </div>
     );
@@ -85,7 +81,7 @@ export default function RoomScreen() {
         <div className="mx-auto max-w-2xl px-5 py-4">
           <SafetyNote variant="compact" />
           <p className="mt-2 text-center text-xs text-slate/50">
-            Connected to Rehub facility network · {workspace.facility.name}
+            Connected to Rehub facility network · {workspace?.facility.name}
           </p>
         </div>
       </footer>

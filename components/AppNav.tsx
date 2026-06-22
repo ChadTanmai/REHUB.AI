@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RehubWordmark } from "@/components/RehubLogo";
 import UserMenu from "@/components/UserMenu";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 /**
  * The operational app nav — used by therapist, admin, facility, room, and
@@ -26,6 +27,7 @@ export default function AppNav({
   userName?: string;
 }) {
   const path = usePathname();
+  const { signedIn } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 border-b border-gray-muted bg-white/95 backdrop-blur-sm">
@@ -43,27 +45,38 @@ export default function AppNav({
           </>
         )}
 
-        <nav className="ml-4 hidden items-center gap-0.5 md:flex">
-          {NAV_ITEMS.map((item) => {
-            const active = path === item.href || path.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-navy/8 text-navy"
-                    : "text-slate hover:bg-offwhite hover:text-navy"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        {signedIn && (
+          <nav className="ml-4 hidden items-center gap-0.5 md:flex">
+            {NAV_ITEMS.map((item) => {
+              const active = path === item.href || path.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-navy/8 text-navy"
+                      : "text-slate hover:bg-offwhite hover:text-navy"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
         <div className="ml-auto flex items-center gap-3">
-          <UserMenu />
+          {signedIn ? (
+            <UserMenu />
+          ) : (
+            <Link
+              href="/auth/signin"
+              className="rounded-lg border border-gray-muted bg-white px-4 py-1.5 text-sm font-semibold text-navy hover:bg-offwhite"
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
     </header>
