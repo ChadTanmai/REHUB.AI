@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RehubWordmark } from "@/components/RehubLogo";
+import UserMenu from "@/components/UserMenu";
 
 /**
  * The operational app nav — used by therapist, admin, facility, room, and
@@ -62,21 +63,7 @@ export default function AppNav({
         </nav>
 
         <div className="ml-auto flex items-center gap-3">
-          {userName && (
-            <span className="hidden text-sm text-slate/60 sm:block">{userName}</span>
-          )}
-          <Link
-            href="/demo"
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-slate/70 transition-colors hover:text-navy"
-          >
-            Demo
-          </Link>
-          <Link
-            href="/"
-            className="rounded-md border border-gray-muted bg-white px-3 py-1.5 text-sm font-medium text-slate transition-colors hover:border-navy/30 hover:text-navy"
-          >
-            ← Marketing site
-          </Link>
+          <UserMenu />
         </div>
       </div>
     </header>

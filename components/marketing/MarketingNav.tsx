@@ -4,19 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { RehubWordmark } from "@/components/RehubLogo";
+import UserMenu from "@/components/UserMenu";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { EASE } from "./motion";
 
 const LINKS = [
   { href: "/for-facilities", label: "For facilities" },
   { href: "/#product", label: "Product" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/demo-v2", label: "Live demo" },
   { href: "/about", label: "About" },
 ];
 
 export default function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const { signedIn, loading } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -54,24 +55,40 @@ export default function MarketingNav() {
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link
-            href="/demo"
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-slate transition-colors hover:text-navy"
-          >
-            Live demo
-          </Link>
-          <Link
-            href="/auth/signin"
-            className="rounded-lg border border-gray-muted bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-offwhite"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/auth/signup"
-            className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white shadow-soft transition-all hover:bg-[#0c2030] hover:shadow-panel"
-          >
-            Get started
-          </Link>
+          {loading ? (
+            <div className="h-9 w-20 animate-pulse rounded-lg bg-gray-muted/40" />
+          ) : signedIn ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white shadow-soft transition-all hover:bg-[#0c2030]"
+              >
+                Go to dashboard
+              </Link>
+              <UserMenu />
+            </>
+          ) : (
+            <>
+              <Link
+                href="/demo"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-slate transition-colors hover:text-navy"
+              >
+                Live demo
+              </Link>
+              <Link
+                href="/auth/signin"
+                className="rounded-lg border border-gray-muted bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-offwhite"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/auth/signup"
+                className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white shadow-soft transition-all hover:bg-[#0c2030] hover:shadow-panel"
+              >
+                Get started
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -120,22 +137,32 @@ export default function MarketingNav() {
               >
                 Live demo
               </Link>
-              <div className="flex gap-2 pt-3">
+              {signedIn ? (
                 <Link
-                  href="/auth/signin"
+                  href="/dashboard"
                   onClick={() => setOpen(false)}
-                  className="flex-1 rounded-lg border border-gray-muted bg-white px-4 py-2.5 text-center text-sm font-semibold text-navy"
+                  className="mt-3 block rounded-lg bg-navy px-4 py-2.5 text-center text-sm font-semibold text-white"
                 >
-                  Sign in
+                  Go to dashboard
                 </Link>
-                <Link
-                  href="/auth/signup"
-                  onClick={() => setOpen(false)}
-                  className="flex-1 rounded-lg bg-navy px-4 py-2.5 text-center text-sm font-semibold text-white"
-                >
-                  Get started
-                </Link>
-              </div>
+              ) : (
+                <div className="flex gap-2 pt-3">
+                  <Link
+                    href="/auth/signin"
+                    onClick={() => setOpen(false)}
+                    className="flex-1 rounded-lg border border-gray-muted bg-white px-4 py-2.5 text-center text-sm font-semibold text-navy"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    onClick={() => setOpen(false)}
+                    className="flex-1 rounded-lg bg-navy px-4 py-2.5 text-center text-sm font-semibold text-white"
+                  >
+                    Get started
+                  </Link>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
