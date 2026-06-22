@@ -145,8 +145,7 @@ export default function ContactPage() {
                       Request demo
                     </button>
                     <p className="text-center text-xs text-slate/55">
-                      Demo only — your details are stored locally in this browser
-                      and never transmitted.
+                      Your information is used only to follow up on this request.
                     </p>
                   </motion.form>
                 )}

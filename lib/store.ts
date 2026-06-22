@@ -1,19 +1,15 @@
 /**
- * Rehub facility workspace store — the demo "backend/server layer."
+ * Rehub facility workspace store.
  *
- * Architecture intent (see docs/product_spec.md):
- *   Patient room screens and therapist dashboards never talk to each other
- *   directly. They both read and write a shared facility workspace. In this MVP
- *   that shared layer is:
- *     - localStorage  → the shared source of truth (survives reloads)
- *     - BroadcastChannel → real-time fan-out across every tab/device on the host
+ * Architecture:
+ *   Patient rooms and therapist dashboards share one facility workspace.
+ *   - localStorage  → shared source of truth (survives reloads)
+ *   - BroadcastChannel → real-time fan-out across tabs on the same device
+ *   - SSE (/api/sync) → real-time fan-out across devices on the same network
  *
- * This is deliberately shaped like Supabase Realtime: `subscribe()` mirrors a
- * channel subscription, and each mutation is an atomic write that fans out to
- * all subscribers. Swapping in Supabase (lib/supabase.ts) means replacing the
- * persistence + broadcast internals, not the call sites.
- *
- * Demo only — no real patient data is ever stored.
+ * Identity and facility membership are managed in Supabase Auth + the
+ * facilities/facility_members tables (see lib/supabase/facilities.ts).
+ * This store handles the live workspace state (rooms, requests, events).
  */
 
 "use client";

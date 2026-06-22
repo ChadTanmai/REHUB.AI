@@ -75,7 +75,7 @@ export interface Room {
   id: string;
   facilityId: string;
   roomNumber: string;
-  displayName: string; // demo-only first name, never real PHI
+  displayName: string; // resident display name, never store full legal name here
   active: boolean;
   deviceId?: string;
   lastSeenAt?: string;
