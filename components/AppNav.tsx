@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home" },
   { href: "/therapist", label: "Care queue" },
+  { href: "/rooms", label: "Rooms" },
   { href: "/facility", label: "Facility" },
   { href: "/admin", label: "Analytics" },
 ];

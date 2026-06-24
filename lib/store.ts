@@ -305,7 +305,17 @@ class RehubStore {
 
   addRoom(
     facilityId: string,
-    input: { roomNumber: string; displayName: string; deviceId?: string },
+    input: {
+      roomNumber: string;
+      displayName: string;
+      deviceId?: string;
+      name?: string;
+      floor?: string;
+      wing?: string;
+      roomType?: import("./types").RoomType;
+      capacity?: number;
+      description?: string;
+    },
   ): Room {
     const ws = this.ensureFacility(facilityId);
     const existing = ws.rooms.find((r) => r.roomNumber === input.roomNumber);
@@ -314,6 +324,12 @@ class RehubStore {
       existing.active = true;
       existing.deviceId = input.deviceId ?? existing.deviceId;
       existing.lastSeenAt = new Date().toISOString();
+      if (input.name !== undefined) existing.name = sanitizeField(input.name, 60);
+      if (input.floor !== undefined) existing.floor = sanitizeField(input.floor, 20);
+      if (input.wing !== undefined) existing.wing = sanitizeField(input.wing, 20);
+      if (input.roomType !== undefined) existing.roomType = input.roomType;
+      if (input.capacity !== undefined) existing.capacity = input.capacity;
+      if (input.description !== undefined) existing.description = sanitizeField(input.description, 200);
       this.persist(facilityId);
       this.emit();
       return existing;
@@ -322,16 +338,68 @@ class RehubStore {
       id: uid("room"),
       facilityId,
       roomNumber: sanitizeField(input.roomNumber, 12),
-      displayName: sanitizeField(input.displayName, 40) || "Resident",
+      displayName: sanitizeField(input.displayName, 40) || "Room " + input.roomNumber,
       active: true,
       deviceId: input.deviceId,
       lastSeenAt: new Date().toISOString(),
+      name: input.name ? sanitizeField(input.name, 60) : `Room ${input.roomNumber}`,
+      floor: input.floor ? sanitizeField(input.floor, 20) : undefined,
+      wing: input.wing ? sanitizeField(input.wing, 20) : undefined,
+      roomType: input.roomType,
+      capacity: input.capacity ?? 1,
+      patientCount: 0,
+      roomStatus: "Available",
+      description: input.description ? sanitizeField(input.description, 200) : undefined,
     };
     ws.rooms.push(room);
     ws.facility.roomCount = ws.rooms.length;
     this.persist(facilityId);
     this.emit();
     dbUpsertRoom(room).catch(() => {});
+    return room;
+  }
+
+  updateRoom(
+    facilityId: string,
+    roomId: string,
+    patch: Partial<Pick<Room, "name" | "floor" | "wing" | "roomType" | "capacity" | "roomStatus" | "description" | "active">>,
+  ): Room | null {
+    const ws = this.ensureFacility(facilityId);
+    const room = ws.rooms.find((r) => r.id === roomId);
+    if (!room) return null;
+    Object.assign(room, patch);
+    this.persist(facilityId);
+    this.emit();
+    return room;
+  }
+
+  deleteRoom(facilityId: string, roomId: string): boolean {
+    const ws = this.ensureFacility(facilityId);
+    const idx = ws.rooms.findIndex((r) => r.id === roomId);
+    if (idx === -1) return false;
+    ws.rooms.splice(idx, 1);
+    ws.facility.roomCount = ws.rooms.length;
+    this.persist(facilityId);
+    this.emit();
+    return true;
+  }
+
+  /** Assign a patient to a room (increments patientCount). */
+  assignPatientToRoom(
+    facilityId: string,
+    roomId: string,
+    patientName: string,
+  ): Room | null {
+    const ws = this.ensureFacility(facilityId);
+    const room = ws.rooms.find((r) => r.id === roomId);
+    if (!room) return null;
+    const count = (room.patientCount ?? 0) + 1;
+    const cap = room.capacity ?? 1;
+    room.patientCount = count;
+    room.displayName = patientName;
+    room.roomStatus = count >= cap ? "Occupied" : "Partially Occupied";
+    this.persist(facilityId);
+    this.emit();
     return room;
   }
 

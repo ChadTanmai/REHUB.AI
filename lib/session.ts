@@ -14,6 +14,7 @@ import type { DeviceType } from "./types";
 
 const ROOM_KEY = "rehub:session:room";
 const THERAPIST_KEY = "rehub:session:therapist";
+const PATIENT_KEY = "rehub:session:patient";
 
 export interface RoomSession {
   deviceType: "room";
@@ -34,6 +35,17 @@ export interface TherapistSession {
   role: string;
   assignedRooms: string[] | "all";
   pairedAt: string;
+}
+
+export interface PatientSession {
+  deviceType: "patient";
+  facilityId: string;
+  facilityCode: string;
+  facilityName: string;
+  roomId: string;
+  roomNumber: string;
+  patientName: string;
+  joinedAt: string;
 }
 
 function read<T>(key: string): T | null {
@@ -77,6 +89,18 @@ export function saveTherapistSession(session: TherapistSession) {
 
 export function clearTherapistSession() {
   if (typeof window !== "undefined") localStorage.removeItem(THERAPIST_KEY);
+}
+
+export function getPatientSession(): PatientSession | null {
+  return read<PatientSession>(PATIENT_KEY);
+}
+
+export function savePatientSession(session: PatientSession) {
+  write(PATIENT_KEY, session);
+}
+
+export function clearPatientSession() {
+  if (typeof window !== "undefined") localStorage.removeItem(PATIENT_KEY);
 }
 
 export function deviceLabel(type: DeviceType): string {

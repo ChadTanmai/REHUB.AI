@@ -7,8 +7,6 @@ import { Suspense } from "react";
 import AuthCard from "@/components/auth/AuthCard";
 import GoogleButton from "@/components/auth/GoogleButton";
 import { getAuthClient } from "@/lib/auth/supabase-browser";
-import { getStore } from "@/lib/store";
-import { saveTherapistSession, saveRoomSession } from "@/lib/session";
 import { normalizeFacilityCode } from "@/lib/security";
 
 function SignInForm() {
@@ -77,28 +75,8 @@ function SignInForm() {
     setJoinError("");
     const code = normalizeFacilityCode(joinCode);
     if (!code) { setJoinError("Enter a facility code."); return; }
-    const store = getStore();
-    const facilityId = store.facilityIdForCode(code);
-    if (!facilityId) {
-      setJoinError("That code doesn't match any facility. Check with your administrator.");
-      return;
-    }
-    const ws = store.getWorkspace(facilityId);
-    const room = ws.rooms[0];
-    if (!room) {
-      setJoinError("No rooms are set up yet. Ask your administrator to add rooms first.");
-      return;
-    }
-    saveRoomSession({
-      deviceType: "room",
-      facilityId,
-      facilityCode: ws.facility.facilityCode,
-      roomId: room.id,
-      roomNumber: room.roomNumber,
-      displayName: room.displayName,
-      pairedAt: new Date().toISOString(),
-    });
-    router.push(`/room/${room.id}`);
+    // Hand off to the full join flow (room selection + patient name)
+    router.push(`/join?code=${encodeURIComponent(code)}`);
   }
 
   // ── Role chooser ──────────────────────────────────────────────────────────

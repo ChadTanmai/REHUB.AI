@@ -71,14 +71,40 @@ export interface Facility {
   ccn?: string;
 }
 
+export type RoomStatus =
+  | "Available"
+  | "Occupied"
+  | "Partially Occupied"
+  | "Maintenance"
+  | "Cleaning"
+  | "Offline"
+  | "Restricted";
+
+export type RoomType =
+  | "Standard"
+  | "Private"
+  | "ICU"
+  | "Recovery"
+  | "Therapy"
+  | "Observation";
+
 export interface Room {
   id: string;
   facilityId: string;
   roomNumber: string;
-  displayName: string; // resident display name, never store full legal name here
+  displayName: string; // current patient's name (or room label when empty)
   active: boolean;
   deviceId?: string;
   lastSeenAt?: string;
+  // Admin-managed metadata
+  name?: string;          // e.g. "Room 101", "Suite A"
+  floor?: string;
+  wing?: string;
+  roomType?: RoomType;
+  capacity?: number;      // max patients (default 1)
+  patientCount?: number;  // current patients
+  roomStatus?: RoomStatus;
+  description?: string;
 }
 
 export type TherapistRole =
