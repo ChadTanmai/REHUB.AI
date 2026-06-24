@@ -96,7 +96,7 @@ export async function fetchFacilityRequests(facilityId: string): Promise<RemoteR
     const supabase = getAuthClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
-      .from("requests")
+      .from("patient_messages")
       .select("*")
       .eq("facility_id", facilityId)
       .order("created_at", { ascending: false })
@@ -121,7 +121,7 @@ export function subscribeFacilityRequests(
       .on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         "postgres_changes" as any,
-        { event: "*", schema: "public", table: "requests", filter: `facility_id=eq.${facilityId}` },
+        { event: "*", schema: "public", table: "patient_messages", filter: `facility_id=eq.${facilityId}` },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (payload: any) => {
           if (payload.new) onChange(mapRow(payload.new));
@@ -142,7 +142,7 @@ export async function updateRequestStatus(id: string, status: Status): Promise<b
     if (status === "Acknowledged") patch.acknowledged_at = new Date().toISOString();
     if (status === "Resolved") patch.resolved_at = new Date().toISOString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("requests").update(patch).eq("id", id);
+    const { error } = await (supabase as any).from("patient_messages").update(patch).eq("id", id);
     return !error;
   } catch {
     return false;
