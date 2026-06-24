@@ -281,7 +281,7 @@ export default function DashboardPage() {
               {/* Quick stats */}
               {ws && (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <StatCard label="Rooms" value={ws.rooms.length} href="/facility" />
+                  <StatCard label="Rooms" value={ws.rooms.length} href="/rooms" />
                   <StatCard label="Staff" value={ws.therapists.length} href="/facility" />
                   <StatCard label="Active requests" value={activeRequests.length} href="/therapist" />
                   <StatCard label="Urgent" value={urgentCount} href="/therapist" accent={urgentCount > 0} />
@@ -334,7 +334,7 @@ export default function DashboardPage() {
               <div className="rounded-xl border border-gray-muted bg-white p-5 shadow-soft">
                 <h3 className="mb-3 text-sm font-semibold text-navy">Quick actions</h3>
                 <div className="flex flex-wrap gap-2">
-                  <QuickAction icon={<PlusIcon />} label="Add room" href="/facility" />
+                  <QuickAction icon={<PlusIcon />} label="Add room" href="/rooms" />
                   <QuickAction icon={<UsersIcon />} label="Add staff" href="/facility" />
                   <QuickAction icon={<ChartIcon />} label="View analytics" href="/admin" />
                   <QuickAction icon={<BuildingIcon />} label="Facility settings" href="/facility" />
