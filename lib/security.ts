@@ -46,6 +46,18 @@ export function normalizeFacilityCode(input: string): string {
     .slice(0, 24);
 }
 
+/**
+ * Live-format a facility code as the user types, so on a phone they can type
+ * the word then the number and the dash auto-inserts: "test01" → "TEST-01".
+ * Strips punctuation first, then places a single dash before the first digit
+ * run. Codes with no digits (e.g. "MAPLE") are left undashed.
+ */
+export function formatJoinCodeInput(input: string): string {
+  const squashed = (input || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+  const m = squashed.match(/^([A-Z]+)(\d.*)$/);
+  return m ? `${m[1]}-${m[2]}` : squashed;
+}
+
 /** Reminder string surfaced in setup flows. */
 export const DEMO_DATA_NOTICE =
   "Demo mode uses fictional names only. Do not enter real patient information.";

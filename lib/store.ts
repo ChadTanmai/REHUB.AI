@@ -73,6 +73,11 @@ function purgeExpiredDemoFacilities() {
 }
 
 function uid(prefix: string): string {
+  // Use real UUIDs so ids line up 1:1 with the Supabase tables (uuid columns).
+  // This is what lets a facility/room created on one device be found on another.
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
   return `${prefix}-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 8)}`;
@@ -366,14 +371,70 @@ class RehubStore {
     return true;
   }
 
-  /** Resolve a facility id from a (case-insensitive) facility code. */
+  /**
+   * Seed (or refresh) a facility workspace from remote data using the remote
+   * ids verbatim. Used by the cross-device join flow so the patient device's
+   * local workspace matches the admin's facility and rooms exactly.
+   */
+  seedRemoteFacility(input: {
+    id: string;
+    name: string;
+    facilityCode: string;
+    teamName?: string | null;
+    rooms: { id: string; roomNumber: string; displayName: string; active?: boolean }[];
+  }): FacilityWorkspace {
+    const existing = this.workspaces.get(input.id) ?? this.tryLoadWorkspace(input.id);
+    const ws: FacilityWorkspace = existing ?? {
+      facility: {
+        id: input.id,
+        name: input.name,
+        facilityCode: input.facilityCode.toUpperCase(),
+        roomCount: input.rooms.length,
+        teamName: input.teamName ?? "Care Team",
+        createdAt: new Date().toISOString(),
+      },
+      rooms: [],
+      therapists: [],
+      requests: [],
+      events: [],
+    };
+    ws.facility.name = input.name;
+    ws.facility.facilityCode = input.facilityCode.toUpperCase();
+    ws.facility.teamName = input.teamName ?? ws.facility.teamName;
+    // Merge rooms by id (keep any local-only fields already present).
+    for (const r of input.rooms) {
+      const found = ws.rooms.find((x) => x.id === r.id);
+      if (found) {
+        found.roomNumber = r.roomNumber;
+        found.displayName = r.displayName || found.displayName;
+        found.active = r.active !== false;
+      } else {
+        ws.rooms.push({
+          id: r.id,
+          facilityId: input.id,
+          roomNumber: r.roomNumber,
+          displayName: r.displayName || `Room ${r.roomNumber}`,
+          active: r.active !== false,
+        });
+      }
+    }
+    ws.facility.roomCount = ws.rooms.length;
+    this.workspaces.set(input.id, ws);
+    this.persist(input.id, false);
+    this.emit();
+    return ws;
+  }
+
+  /** Resolve a facility id from a (case-insensitive, dash-insensitive) code. */
   facilityIdForCode(code: string): string | null {
-    const normalized = code.trim().toUpperCase();
+    const squash = (c: string) => c.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const normalized = squash(code);
+    if (!normalized) return null;
     // Legacy: support old REHUB-DEMO code for backwards compat only
-    if (normalized === DEMO_FACILITY_CODE) return null;
+    if (normalized === squash(DEMO_FACILITY_CODE)) return null;
     // Scan loaded + persisted facilities.
     for (const ws of this.workspaces.values()) {
-      if (ws.facility.facilityCode.toUpperCase() === normalized) {
+      if (squash(ws.facility.facilityCode) === normalized) {
         return ws.facility.id;
       }
     }
@@ -383,7 +444,7 @@ class RehubStore {
         if (!key?.startsWith(STORAGE_PREFIX) && !key?.startsWith(DEMO_PREFIX)) continue;
         try {
           const ws = JSON.parse(localStorage.getItem(key)!) as FacilityWorkspace;
-          if (ws.facility.facilityCode.toUpperCase() === normalized) {
+          if (squash(ws.facility.facilityCode) === normalized) {
             this.workspaces.set(ws.facility.id, ws);
             return ws.facility.id;
           }

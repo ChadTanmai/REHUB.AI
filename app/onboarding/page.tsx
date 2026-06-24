@@ -15,7 +15,7 @@ import { saveTherapistSession } from "@/lib/session";
 import { normalizeFacilityCode, sanitizeField } from "@/lib/security";
 import { useMounted } from "@/lib/useRehub";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { createFacility, saveUserFacilityToMeta } from "@/lib/supabase/facilities";
+import { saveUserFacilityToMeta, upsertFacilityFromStore, upsertRoom } from "@/lib/supabase/facilities";
 
 const ROLES: TherapistRole[] = [
   "Physical Therapist",
@@ -121,10 +121,10 @@ export default function OnboardingPage() {
       ccn: matched?.ccn,
     });
 
-    rooms.forEach((num, i) =>
+    const createdRooms = rooms.map((num, i) =>
       store.addRoom(facility.id, {
         roomNumber: num,
-        displayName: `Resident ${i + 1}`,
+        displayName: `Room ${num}`,
         deviceId: `device-${num}`,
       }),
     );
@@ -146,22 +146,29 @@ export default function OnboardingPage() {
       pairedAt: new Date().toISOString(),
     });
 
-    // Persist to Supabase if authenticated
+    // Persist to Supabase if authenticated, using the SAME ids as the local
+    // store so the facility + rooms are findable from any device by code.
     if (signedIn) {
-      const supabaseFacility = await createFacility({
-        name: facilityName || "New Facility",
-        facilityCode: finalCode,
-        teamName: teamName || undefined,
-        address: matched?.address,
-        city: matched?.city,
-        state: matched?.state,
-        zip: matched?.zip,
-        phone: matched?.phone,
-        ccn: matched?.ccn,
-      });
+      const ok = await upsertFacilityFromStore({
+        id: facility.id,
+        name: facility.name,
+        facilityCode: facility.facilityCode,
+        teamName: facility.teamName,
+      }).catch(() => false);
 
-      if (supabaseFacility) {
-        await saveUserFacilityToMeta(supabaseFacility.id, supabaseFacility.name);
+      if (ok) {
+        await Promise.all(
+          createdRooms.map((r) =>
+            upsertRoom({
+              id: r.id,
+              facilityId: facility.id,
+              roomNumber: r.roomNumber,
+              displayName: r.displayName,
+              active: r.active,
+            }).catch(() => false),
+          ),
+        );
+        await saveUserFacilityToMeta(facility.id, facility.name).catch(() => {});
       }
     }
 

@@ -10,7 +10,7 @@ import { getTherapistSession, saveTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { normalizeFacilityCode } from "@/lib/security";
-import { saveUserFacilityToMeta } from "@/lib/supabase/facilities";
+import { saveUserFacilityToMeta, upsertFacilityFromStore } from "@/lib/supabase/facilities";
 import type { Facility } from "@/lib/types";
 
 const EMPTY = { name: "", facilityCode: "", teamName: "Care Team" };
@@ -80,6 +80,15 @@ export default function ManageFacilitiesPage() {
       roomCount: 0,
       teamName: form.teamName.trim() || "Care Team",
     });
+    // Publish to Supabase so the code works from any device.
+    if (signedIn) {
+      upsertFacilityFromStore({
+        id: facility.id,
+        name: facility.name,
+        facilityCode: facility.facilityCode,
+        teamName: facility.teamName,
+      }).catch(() => {});
+    }
     setCreating(false);
     setForm(EMPTY);
   }
@@ -89,11 +98,19 @@ export default function ManageFacilitiesPage() {
     if (!editing) return;
     const err = validate(editing);
     if (err) { setFormError(err); return; }
-    store.updateFacility(editing, {
+    const updated = store.updateFacility(editing, {
       name: form.name.trim(),
       facilityCode: normalizeFacilityCode(form.facilityCode),
       teamName: form.teamName.trim() || "Care Team",
     });
+    if (signedIn && updated) {
+      upsertFacilityFromStore({
+        id: updated.id,
+        name: updated.name,
+        facilityCode: updated.facilityCode,
+        teamName: updated.teamName,
+      }).catch(() => {});
+    }
     setEditing(null);
     setForm(EMPTY);
   }

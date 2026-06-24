@@ -7,6 +7,7 @@ import { getStore } from "@/lib/store";
 import { getTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { upsertFacilityFromStore, upsertRoom } from "@/lib/supabase/facilities";
 import type { Room, RoomStatus, RoomType } from "@/lib/types";
 
 const ROOM_TYPES: RoomType[] = ["Standard", "Private", "ICU", "Recovery", "Therapy", "Observation"];
@@ -47,7 +48,7 @@ const EMPTY_FORM = {
 export default function RoomsPage() {
   const mounted = useMounted();
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, signedIn } = useAuth();
   useStoreVersion();
 
   const [showAdd, setShowAdd] = useState(false);
@@ -103,7 +104,7 @@ export default function RoomsPage() {
     if (err) { setFormError(err); return; }
     setSaving(true);
     setFormError("");
-    store.addRoom(facilityId!, {
+    const room = store.addRoom(facilityId!, {
       roomNumber: form.roomNumber.trim(),
       displayName: form.name.trim() || `Room ${form.roomNumber.trim()}`,
       name: form.name.trim() || `Room ${form.roomNumber.trim()}`,
@@ -113,6 +114,21 @@ export default function RoomsPage() {
       capacity: Math.max(1, form.capacity),
       description: form.description.trim() || undefined,
     });
+    // Publish to Supabase so patients on other devices can pick this room.
+    if (signedIn && facilityId) {
+      const fac = store.getWorkspace(facilityId).facility;
+      upsertFacilityFromStore({
+        id: fac.id, name: fac.name, facilityCode: fac.facilityCode, teamName: fac.teamName,
+      })
+        .then(() => upsertRoom({
+          id: room.id,
+          facilityId: facilityId,
+          roomNumber: room.roomNumber,
+          displayName: room.displayName,
+          active: room.active,
+        }))
+        .catch(() => {});
+    }
     setForm(EMPTY_FORM);
     setShowAdd(false);
     setSaving(false);

@@ -179,3 +179,96 @@ export async function saveUserFacilityToMeta(facilityId: string, facilityName: s
     data: { facility_id: facilityId, facility_name: facilityName },
   });
 }
+
+/**
+ * Upsert a facility using the SAME id the local store generated (a UUID), via
+ * the authenticated client so RLS (owner_id = auth.uid()) is satisfied. This is
+ * what makes a facility findable from another device by its code.
+ */
+export async function upsertFacilityFromStore(params: {
+  id: string;
+  name: string;
+  facilityCode: string;
+  teamName?: string;
+}): Promise<boolean> {
+  const supabase = getAuthClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from("facilities")
+    .upsert(
+      {
+        id: params.id,
+        name: params.name,
+        facility_code: params.facilityCode.toUpperCase(),
+        team_name: params.teamName ?? "Care Team",
+        owner_id: user.id,
+      },
+      { onConflict: "id" },
+    );
+  return !error;
+}
+
+/** Upsert one room for a facility the user owns. Ids must be UUIDs. */
+export async function upsertRoom(params: {
+  id: string;
+  facilityId: string;
+  roomNumber: string;
+  displayName: string;
+  active?: boolean;
+}): Promise<boolean> {
+  const supabase = getAuthClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from("rooms")
+    .upsert(
+      {
+        id: params.id,
+        facility_id: params.facilityId,
+        room_number: params.roomNumber,
+        display_name: params.displayName,
+        active: params.active ?? true,
+      },
+      { onConflict: "id" },
+    );
+  return !error;
+}
+
+export interface PublicFacility {
+  id: string;
+  name: string;
+  facilityCode: string;
+  teamName: string | null;
+  rooms: { id: string; roomNumber: string; displayName: string; active: boolean }[];
+}
+
+/**
+ * Public, cross-device lookup of a facility + its rooms by code.
+ * Works without authentication (security-definer RPC). Dash/case-insensitive.
+ */
+export async function lookupFacilityWithRooms(code: string): Promise<PublicFacility | null> {
+  const supabase = getAuthClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc("public_facility_with_rooms", {
+    code,
+  });
+  if (error || !data) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row = data as any;
+  if (!row?.id) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    facilityCode: row.facility_code,
+    teamName: row.team_name ?? null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rooms: ((row.rooms ?? []) as any[]).map((r) => ({
+      id: r.id,
+      roomNumber: r.room_number,
+      displayName: r.display_name ?? "",
+      active: r.active !== false,
+    })),
+  };
+}

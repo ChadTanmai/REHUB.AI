@@ -7,7 +7,7 @@ import { RehubWordmark } from "@/components/RehubLogo";
 import { lookupFacilityByCode, type FacilityLookupResult } from "@/lib/supabase/joinLookup";
 import { getStore } from "@/lib/store";
 import { savePatientSession, saveTherapistSession } from "@/lib/session";
-import { normalizeFacilityCode, sanitizeField } from "@/lib/security";
+import { normalizeFacilityCode, sanitizeField, formatJoinCodeInput } from "@/lib/security";
 import { useMounted } from "@/lib/useRehub";
 import type { Room, RoomStatus } from "@/lib/types";
 
@@ -253,11 +253,18 @@ function JoinFlow() {
 
               <input
                 value={inputCode}
-                onChange={e => setInputCode(e.target.value.toUpperCase())}
-                placeholder="e.g. RH8472"
-                className="input text-center font-mono text-2xl tracking-widest"
+                onChange={e => setInputCode(formatJoinCodeInput(e.target.value))}
+                placeholder="TEST-01"
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                className="input text-center font-mono text-2xl tracking-widest uppercase"
                 autoFocus autoComplete="off"
               />
+              <p className="-mt-2 text-center text-xs text-slate/40">
+                Type the name then the number — the dash adds itself.
+              </p>
 
               <div>
                 <p className="mb-2 text-sm font-medium text-slate">I am joining as:</p>

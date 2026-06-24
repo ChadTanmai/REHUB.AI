@@ -3,15 +3,16 @@
 /**
  * Cross-network facility lookup for the join flow.
  *
- * Tries localStorage first (instant, same device).
- * Falls back to Supabase (works on any device, any network).
+ * Tries localStorage first (instant, same device). Falls back to Supabase via
+ * a public security-definer RPC that returns the facility AND its rooms, so a
+ * patient on a different phone/network sees the same rooms the admin created.
  *
- * This is what makes the join system work like Kahoot — the code
- * works from any phone, tablet, or computer anywhere in the world.
+ * This is what makes the join system work like Kahoot — the code works from
+ * any device, anywhere.
  */
 
-import { getAuthClient } from "@/lib/auth/supabase-browser";
 import { getStore } from "@/lib/store";
+import { lookupFacilityWithRooms } from "@/lib/supabase/facilities";
 
 export interface FacilityLookupResult {
   facilityId: string;
@@ -27,10 +28,12 @@ export async function lookupFacilityByCode(
   const normalized = code.trim().toUpperCase();
   if (!normalized) return null;
 
-  // 1. Check localStorage (same device / same WiFi)
-  const localId = getStore().facilityIdForCode(normalized);
+  const store = getStore();
+
+  // 1. Same device / same browser — instant.
+  const localId = store.facilityIdForCode(normalized);
   if (localId) {
-    const ws = getStore().getWorkspace(localId);
+    const ws = store.getWorkspace(localId);
     return {
       facilityId: localId,
       facilityName: ws.facility.name,
@@ -40,36 +43,26 @@ export async function lookupFacilityByCode(
     };
   }
 
-  // 2. Check Supabase (cross-network, any device)
+  // 2. Any device / any network — Supabase public RPC (facility + rooms).
   try {
-    const supabase = getAuthClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any).rpc("public_lookup_facility", {
-      code: normalized,
-    });
-    if (error || !data) return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const row = data as any;
-    if (!row?.id) return null;
+    const remote = await lookupFacilityWithRooms(normalized);
+    if (!remote) return null;
 
-    // Seed a thin workspace in localStorage so subsequent lookups are instant
-    const store = getStore();
-    store.createFacility({
-      name: row.name,
-      facilityCode: row.facility_code,
-      roomCount: 0,
-      teamName: row.team_name ?? "Care Team",
+    // Seed the local workspace with the EXACT remote ids so room selection
+    // and the room screen line up across devices.
+    store.seedRemoteFacility({
+      id: remote.id,
+      name: remote.name,
+      facilityCode: remote.facilityCode,
+      teamName: remote.teamName,
+      rooms: remote.rooms,
     });
-
-    // Now retrieve from store (createFacility returns with the id)
-    const seededId = store.facilityIdForCode(row.facility_code);
-    if (!seededId) return null;
 
     return {
-      facilityId: seededId,
-      facilityName: row.name,
-      facilityCode: row.facility_code,
-      teamName: row.team_name ?? null,
+      facilityId: remote.id,
+      facilityName: remote.name,
+      facilityCode: remote.facilityCode,
+      teamName: remote.teamName,
       source: "supabase",
     };
   } catch {

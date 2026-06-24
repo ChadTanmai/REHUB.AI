@@ -7,7 +7,7 @@ import { Suspense } from "react";
 import AuthCard from "@/components/auth/AuthCard";
 import GoogleButton from "@/components/auth/GoogleButton";
 import { getAuthClient } from "@/lib/auth/supabase-browser";
-import { normalizeFacilityCode } from "@/lib/security";
+import { normalizeFacilityCode, formatJoinCodeInput } from "@/lib/security";
 
 function SignInForm() {
   const router = useRouter();
@@ -149,9 +149,13 @@ function SignInForm() {
         <div>
           <input
             value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="e.g. MAPLE-01"
-            className="input text-center font-mono text-lg tracking-widest"
+            onChange={(e) => setJoinCode(formatJoinCodeInput(e.target.value))}
+            placeholder="TEST-01"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            className="input text-center font-mono text-lg tracking-widest uppercase"
             autoFocus
             autoComplete="off"
           />
