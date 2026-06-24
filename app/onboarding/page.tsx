@@ -9,7 +9,8 @@ import MarketingFooter from "@/components/marketing/MarketingFooter";
 import { EASE } from "@/components/marketing/motion";
 import FacilityAutocomplete from "@/components/marketing/FacilityAutocomplete";
 import type { TherapistRole } from "@/lib/types";
-import { suggestCode, type DirectoryFacility } from "@/lib/facilityDirectory";
+import { type DirectoryFacility } from "@/lib/facilityDirectory";
+import { generateFacilityCode } from "@/lib/facilityCode";
 import { getStore } from "@/lib/store";
 import { saveTherapistSession } from "@/lib/session";
 import { normalizeFacilityCode, sanitizeField } from "@/lib/security";
@@ -27,14 +28,6 @@ const ROLES: TherapistRole[] = [
 
 const STEP_LABELS = ["Facility", "Admin", "Rooms", "Your team", "Launch"];
 
-function codeFromName(name: string): string {
-  const base = name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 12);
-  return base ? `${base}-01` : "";
-}
 
 export default function OnboardingPage() {
   const mounted = useMounted();
@@ -47,15 +40,12 @@ export default function OnboardingPage() {
 
   // Facility
   const [facilityName, setFacilityName] = useState("");
-  const [code, setCode] = useState("");
   const [teamName, setTeamName] = useState("");
-  const [codeTouched, setCodeTouched] = useState(false);
   const [matched, setMatched] = useState<DirectoryFacility | null>(null);
 
   function selectDirectory(f: DirectoryFacility) {
     setFacilityName(f.name);
     setMatched(f);
-    if (!codeTouched) setCode(suggestCode(f));
   }
 
   // Admin — pre-fill from Supabase profile
@@ -70,9 +60,10 @@ export default function OnboardingPage() {
   const [therName, setTherName] = useState(profile?.displayName ?? "");
   const [therRole, setTherRole] = useState<TherapistRole>("Physical Therapist");
 
+  // System-generated, immutable join code. Stable per facility name.
   const effectiveCode = useMemo(
-    () => (codeTouched ? code : codeFromName(facilityName)),
-    [code, codeTouched, facilityName],
+    () => (facilityName.trim() ? generateFacilityCode(facilityName, []) : ""),
+    [facilityName],
   );
 
   function go(next: number) {
@@ -105,7 +96,7 @@ export default function OnboardingPage() {
 
   async function launch() {
     setLaunching(true);
-    const finalCode = normalizeFacilityCode(effectiveCode) || `REHUB-${Date.now() % 10000}`;
+    const finalCode = effectiveCode || generateFacilityCode(facilityName || "Rehub", []);
     const store = getStore();
 
     const facility = store.createFacility({
@@ -258,14 +249,19 @@ export default function OnboardingPage() {
                       )}
                     </AnimatePresence>
 
-                    <Field label="Facility code (staff and rooms use this to connect)">
-                      <input
-                        value={effectiveCode}
-                        onChange={(e) => { setCodeTouched(true); setCode(normalizeFacilityCode(e.target.value)); }}
-                        placeholder="MAPLE-01"
-                        className="input font-mono"
-                      />
-                    </Field>
+                    {facilityName.trim() && (
+                      <div className="rounded-xl border border-teal/20 bg-teal/5 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-teal">
+                          Your join code
+                        </p>
+                        <p className="mt-1 font-mono text-2xl font-bold tracking-widest text-navy">
+                          {effectiveCode}
+                        </p>
+                        <p className="mt-1 text-xs text-slate/60">
+                          Generated automatically — patients and staff use this to connect. It can&apos;t be edited.
+                        </p>
+                      </div>
+                    )}
                     <Field label="Care team name (optional)">
                       <input
                         value={teamName}

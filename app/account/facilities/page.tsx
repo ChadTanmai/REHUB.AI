@@ -9,11 +9,11 @@ import { getStore } from "@/lib/store";
 import { getTherapistSession, saveTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { normalizeFacilityCode } from "@/lib/security";
 import { saveUserFacilityToMeta, upsertFacilityFromStore } from "@/lib/supabase/facilities";
+import { generateFacilityCode } from "@/lib/facilityCode";
 import type { Facility } from "@/lib/types";
 
-const EMPTY = { name: "", facilityCode: "", teamName: "Care Team" };
+const EMPTY = { name: "", teamName: "Care Team" };
 
 export default function ManageFacilitiesPage() {
   const mounted = useMounted();
@@ -53,20 +53,14 @@ export default function ManageFacilitiesPage() {
   }
 
   function startEdit(f: Facility) {
-    setForm({ name: f.name, facilityCode: f.facilityCode, teamName: f.teamName });
+    setForm({ name: f.name, teamName: f.teamName });
     setEditing(f.id);
     setCreating(false);
     setFormError("");
   }
 
-  function validate(excludeId?: string): string {
+  function validate(): string {
     if (!form.name.trim()) return "Facility name is required.";
-    const code = normalizeFacilityCode(form.facilityCode);
-    if (!code) return "A facility code is required.";
-    const dup = facilities.find(
-      (f) => f.facilityCode.toUpperCase() === code.toUpperCase() && f.id !== excludeId,
-    );
-    if (dup) return `Code ${code} is already used by another facility.`;
     return "";
   }
 
@@ -74,9 +68,14 @@ export default function ManageFacilitiesPage() {
     e.preventDefault();
     const err = validate();
     if (err) { setFormError(err); return; }
+    // System-generated code — users never choose it (prevents duplicates/abuse).
+    const code = generateFacilityCode(
+      form.name.trim(),
+      facilities.map((f) => f.facilityCode),
+    );
     const facility = store.createFacility({
       name: form.name.trim(),
-      facilityCode: normalizeFacilityCode(form.facilityCode),
+      facilityCode: code,
       roomCount: 0,
       teamName: form.teamName.trim() || "Care Team",
     });
@@ -96,11 +95,11 @@ export default function ManageFacilitiesPage() {
   function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editing) return;
-    const err = validate(editing);
+    const err = validate();
     if (err) { setFormError(err); return; }
+    // The facility code is immutable once generated — only name/team can change.
     const updated = store.updateFacility(editing, {
       name: form.name.trim(),
-      facilityCode: normalizeFacilityCode(form.facilityCode),
       teamName: form.teamName.trim() || "Care Team",
     });
     if (signedIn && updated) {
@@ -187,18 +186,25 @@ export default function ManageFacilitiesPage() {
                   <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                     placeholder="Green Valley Recovery" className="input" autoFocus />
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate">Join code *</label>
-                  <input value={form.facilityCode}
-                    onChange={e => setForm(f => ({ ...f, facilityCode: e.target.value.toUpperCase() }))}
-                    placeholder="RH8472" className="input font-mono tracking-widest" />
-                </div>
-                <div>
+                <div className="sm:col-span-2">
                   <label className="mb-1 block text-xs font-semibold text-slate">Care team name</label>
                   <input value={form.teamName} onChange={e => setForm(f => ({ ...f, teamName: e.target.value }))}
                     placeholder="Care Team" className="input" />
                 </div>
               </div>
+              {creating && form.name.trim() && (
+                <p className="mt-3 rounded-lg bg-teal/5 px-3 py-2 text-sm text-slate/70">
+                  A unique join code is generated automatically — like{" "}
+                  <span className="font-mono font-semibold text-navy">
+                    {generateFacilityCode(form.name, []).replace(/\d+$/, "####")}
+                  </span>. You can&apos;t edit it; share it with patients and staff once created.
+                </p>
+              )}
+              {!creating && (
+                <p className="mt-3 text-xs text-slate/50">
+                  The join code is system-generated and can&apos;t be changed.
+                </p>
+              )}
               {formError && <p className="mt-2 text-sm text-coral">{formError}</p>}
               <div className="mt-4 flex gap-2">
                 <button type="submit"
