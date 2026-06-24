@@ -32,6 +32,29 @@ export type Priority = "Routine" | "Important" | "Urgent";
 
 export const PRIORITIES: Priority[] = ["Routine", "Important", "Urgent"];
 
+/** Five-level triage urgency surfaced by the AI triage engine. */
+export type UrgencyLevel = "Critical" | "High" | "Medium" | "Low" | "Informational";
+
+export const URGENCY_LEVELS: UrgencyLevel[] = [
+  "Critical",
+  "High",
+  "Medium",
+  "Low",
+  "Informational",
+];
+
+/** Display metadata for each urgency level (color + label + sort weight). */
+export const URGENCY_META: Record<
+  UrgencyLevel,
+  { label: string; color: string; bg: string; dot: string; rank: number }
+> = {
+  Critical:      { label: "Critical",      color: "#dc2626", bg: "#fef2f2", dot: "#dc2626", rank: 5 },
+  High:          { label: "High",          color: "#ea580c", bg: "#fff7ed", dot: "#ea580c", rank: 4 },
+  Medium:        { label: "Medium",        color: "#ca8a04", bg: "#fefce8", dot: "#ca8a04", rank: 3 },
+  Low:           { label: "Low",           color: "#2563eb", bg: "#eff6ff", dot: "#2563eb", rank: 2 },
+  Informational: { label: "Info",          color: "#64748b", bg: "#f8fafc", dot: "#94a3b8", rank: 1 },
+};
+
 export type Status = "New" | "Acknowledged" | "In Progress" | "Resolved";
 
 export const STATUSES: Status[] = [
@@ -52,6 +75,12 @@ export interface AIClassification {
   staffNote: string;
   detectedKeywords: string[];
   safetyFlag: boolean;
+  /** Five-level triage urgency (Critical…Informational). */
+  urgencyLevel: UrgencyLevel;
+  /** Short, plain-English reason for the urgency call (for staff). */
+  triageReason: string;
+  /** Recommended next action for staff. */
+  suggestedAction: string;
 }
 
 export interface Facility {
@@ -140,6 +169,9 @@ export interface Request {
   requestType: RequestType;
   priority: Priority;
   priorityScore: number;
+  urgencyLevel?: UrgencyLevel;
+  triageReason?: string;
+  suggestedAction?: string;
   status: Status;
   notes: string; // staff-facing note from the classifier
   aiSummary: string; // short staff-facing summary

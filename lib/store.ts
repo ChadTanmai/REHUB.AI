@@ -660,6 +660,7 @@ class RehubStore {
     source: RequestSource;
     text?: string;
     fixedType?: RequestType;
+    presetUrgency?: import("./types").UrgencyLevel;
   }): Request {
     const ws = this.ensureFacility(input.facilityId);
     const room = ws.rooms.find((r) => r.id === input.roomId);
@@ -669,6 +670,7 @@ class RehubStore {
     const classification = classifyRequest(cleanText ?? "", {
       fixedType: input.fixedType,
       recentUnresolvedCount: recent,
+      presetUrgency: input.presetUrgency,
     });
 
     const { staffSummary, patientConfirmation } = buildSummary({
@@ -690,6 +692,9 @@ class RehubStore {
       requestType: classification.requestType,
       priority: classification.priority,
       priorityScore: classification.priorityScore,
+      urgencyLevel: classification.urgencyLevel,
+      triageReason: classification.triageReason,
+      suggestedAction: classification.suggestedAction,
       status: "New",
       notes: classification.staffNote,
       aiSummary: staffSummary,

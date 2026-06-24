@@ -11,12 +11,13 @@
  * It never says what condition a resident has.
  */
 
-import type { AIClassification, RequestType } from "./types";
+import type { AIClassification, RequestType, UrgencyLevel } from "./types";
 import {
   scoreRequest,
   scoreToPriority,
   type ScoreContext,
 } from "./priorityAlgorithm";
+import { triage } from "./triageEngine";
 
 /** Keyword → request type. Order matters: earlier entries win ties. */
 const TYPE_KEYWORDS: Array<{ type: RequestType; words: string[] }> = [
@@ -96,6 +97,8 @@ function estimateConfidence(
 export interface ClassifyOptions extends ScoreContext {
   /** When set (manual button), the type is fixed and only scoring/keywords run. */
   fixedType?: RequestType;
+  /** Admit-time priority floor for this patient. */
+  presetUrgency?: UrgencyLevel;
 }
 
 /**
@@ -112,22 +115,49 @@ export function classifyRequest(
     recentUnresolvedCount: options.recentUnresolvedCount,
   });
 
-  const priority = scoreToPriority(breakdown.score);
-  const confidence = estimateConfidence(
-    text,
-    requestType,
-    breakdown.detectedKeywords.length,
+  // Run the 5-level AI triage engine on the free text.
+  const tri = triage(text, {
+    presetUrgency: options.presetUrgency,
+    repeatedUnresolved: options.recentUnresolvedCount,
+  });
+
+  // Reconcile the legacy 3-tier priority with the triage urgency (take the
+  // stronger of the two so a Critical/High triage always lands Urgent).
+  const legacyPriority = scoreToPriority(breakdown.score);
+  const priority =
+    tri.urgency === "Critical" || tri.urgency === "High"
+      ? "Urgent"
+      : tri.urgency === "Medium"
+        ? maxPriority(legacyPriority, "Important")
+        : legacyPriority;
+
+  const confidence = Math.max(
+    estimateConfidence(text, requestType, breakdown.detectedKeywords.length),
+    tri.confidence,
   );
+
+  const safetyFlag = breakdown.safetyFlag || tri.urgency === "Critical";
 
   return {
     requestType,
     priority,
-    priorityScore: breakdown.score,
+    priorityScore: Math.max(breakdown.score, tri.score),
     confidence,
-    staffNote: buildStaffNote(requestType, text, breakdown.safetyFlag),
-    detectedKeywords: breakdown.detectedKeywords,
-    safetyFlag: breakdown.safetyFlag,
+    staffNote: buildStaffNote(requestType, text, safetyFlag),
+    detectedKeywords: Array.from(new Set([...breakdown.detectedKeywords, ...tri.matched])),
+    safetyFlag,
+    urgencyLevel: tri.urgency,
+    triageReason: tri.reason,
+    suggestedAction: tri.suggestedAction,
   };
+}
+
+function maxPriority(
+  a: import("./types").Priority,
+  b: import("./types").Priority,
+): import("./types").Priority {
+  const rank = { Routine: 1, Important: 2, Urgent: 3 } as const;
+  return rank[a] >= rank[b] ? a : b;
 }
 
 /**
