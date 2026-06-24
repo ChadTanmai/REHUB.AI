@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getPatientSession, clearPatientSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
-import { submitPatientRequest } from "@/lib/supabase/requests";
+import { enqueueRequest, ensureAutoFlush } from "@/lib/supabase/outbox";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +30,10 @@ export default function PatientPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const transcriptRef = useRef("");
+
+  // Keep delivering any queued patient requests in the background (retry on
+  // reconnect / focus). The timer is a module singleton, so no cleanup needed.
+  useEffect(() => { ensureAutoFlush(); }, []);
 
   useEffect(() => {
     return () => stopEverything();
@@ -149,9 +153,10 @@ export default function PatientPage() {
   function sendRequest(source: "Button" | "Voice" | "Typed", text: string) {
     if (!room) return;
     const req = store.submitRequest({ facilityId, roomId, source, text: text || undefined });
-    // Publish to Supabase so the nurse command center receives it live, even on
-    // a different device/network. Fire-and-forget.
-    submitPatientRequest({
+    // Deliver to the nurse command center via the durable outbox: it retries on
+    // a dropped connection / focus / reconnect so an emergency request is never
+    // silently lost, even on a flaky phone network.
+    void enqueueRequest({
       facilityCode: session!.facilityCode,
       roomId: req.roomId,
       roomNumber: req.roomNumber,
@@ -163,7 +168,7 @@ export default function PatientPage() {
       urgencyLevel: req.urgencyLevel ?? "Medium",
       triageReason: req.triageReason ?? "",
       suggestedAction: req.suggestedAction ?? "",
-    }).catch(() => {});
+    });
     setSubmitted(true);
     setTranscript("");
     transcriptRef.current = "";
