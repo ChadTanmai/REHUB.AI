@@ -57,6 +57,9 @@ export default function RoomsPage() {
   const [formError, setFormError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [syncMsg, setSyncMsg] = useState("");
+  const [syncOk, setSyncOk] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   if (!mounted) return <div className="min-h-screen bg-offwhite" />;
 
@@ -98,12 +101,13 @@ export default function RoomsPage() {
     return "";
   }
 
-  function handleAdd(e: React.FormEvent) {
+  async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const err = validateForm();
     if (err) { setFormError(err); return; }
     setSaving(true);
     setFormError("");
+    setSyncMsg("");
     const room = store.addRoom(facilityId!, {
       roomNumber: form.roomNumber.trim(),
       displayName: form.name.trim() || `Room ${form.roomNumber.trim()}`,
@@ -114,24 +118,71 @@ export default function RoomsPage() {
       capacity: Math.max(1, form.capacity),
       description: form.description.trim() || undefined,
     });
-    // Publish to Supabase so patients on other devices can pick this room.
-    if (signedIn && facilityId) {
-      const fac = store.getWorkspace(facilityId).facility;
-      upsertFacilityFromStore({
-        id: fac.id, name: fac.name, facilityCode: fac.facilityCode, teamName: fac.teamName,
-      })
-        .then(() => upsertRoom({
-          id: room.id,
-          facilityId: facilityId,
-          roomNumber: room.roomNumber,
-          displayName: room.displayName,
-          active: room.active,
-        }))
-        .catch(() => {});
-    }
     setForm(EMPTY_FORM);
     setShowAdd(false);
     setSaving(false);
+
+    // Publish to Supabase so patients on other devices can pick this room.
+    // We AWAIT and report the real result — no silent failures. We rely on the
+    // live Supabase session inside upsertFacilityFromStore (not a stale flag).
+    const res = await publishFacilityAndRoom(room);
+    setSyncOk(res.ok);
+    setSyncMsg(res.message);
+  }
+
+  // Push the facility + a single room to the cloud, returning a human result.
+  async function publishFacilityAndRoom(room: Room): Promise<{ ok: boolean; message: string }> {
+    const fac = store.getWorkspace(facilityId!).facility;
+    const facRes = await upsertFacilityFromStore({
+      id: fac.id, name: fac.name, facilityCode: fac.facilityCode, teamName: fac.teamName,
+    });
+    if (!facRes.ok) {
+      return { ok: false, message: `Room saved on this device, but cloud sync failed (facility): ${facRes.error}. Patients on other phones won't see it yet.` };
+    }
+    const roomRes = await upsertRoom({
+      id: room.id,
+      facilityId: facilityId!,
+      roomNumber: room.roomNumber,
+      displayName: room.displayName,
+      active: room.active !== false,
+    });
+    if (!roomRes.ok) {
+      return { ok: false, message: `Room saved on this device, but cloud sync failed (room): ${roomRes.error}. Patients on other phones won't see it yet.` };
+    }
+    return { ok: true, message: `Synced to cloud — patients can now pick Room ${room.roomNumber} from any device using code ${fac.facilityCode}.` };
+  }
+
+  // Re-publish the facility + ALL active rooms (for rooms created before sync,
+  // or to recover after a network failure). Surfaces the real outcome.
+  async function syncAll() {
+    setSyncing(true);
+    setSyncMsg("");
+    const fac = store.getWorkspace(facilityId!).facility;
+    const facRes = await upsertFacilityFromStore({
+      id: fac.id, name: fac.name, facilityCode: fac.facilityCode, teamName: fac.teamName,
+    });
+    if (!facRes.ok) {
+      setSyncOk(false);
+      setSyncMsg(`Cloud sync failed (facility): ${facRes.error}`);
+      setSyncing(false);
+      return;
+    }
+    let failed = 0;
+    let lastErr = "";
+    for (const r of rooms) {
+      const rr = await upsertRoom({
+        id: r.id, facilityId: facilityId!, roomNumber: r.roomNumber,
+        displayName: r.displayName ?? r.name ?? `Room ${r.roomNumber}`, active: r.active !== false,
+      });
+      if (!rr.ok) { failed++; lastErr = rr.error ?? ""; }
+    }
+    setSyncOk(failed === 0);
+    setSyncMsg(
+      failed === 0
+        ? `Published ${fac.facilityCode} with ${rooms.length} room${rooms.length !== 1 ? "s" : ""}. Patients can now join from any device.`
+        : `Published facility, but ${failed} room${failed !== 1 ? "s" : ""} failed to sync: ${lastErr}`,
+    );
+    setSyncing(false);
   }
 
   function handleStatusChange(room: Room, status: RoomStatus) {
@@ -159,16 +210,53 @@ export default function RoomsPage() {
               {rooms.length} room{rooms.length !== 1 ? "s" : ""} · {available} available · {occupied} occupied
             </p>
           </div>
-          <button
-            onClick={() => { setShowAdd(true); setEditingId(null); setForm(EMPTY_FORM); setFormError(""); }}
-            className="flex items-center gap-2 rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0c2030]"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-            </svg>
-            Add room
-          </button>
+          <div className="flex items-center gap-2">
+            {rooms.length > 0 && (
+              <button
+                onClick={syncAll}
+                disabled={syncing}
+                className="flex items-center gap-2 rounded-xl border border-teal/40 bg-teal/5 px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9h-3M3 12a9 9 0 0 0 9 9m-9-9a9 9 0 0 1 9-9m-9 9h3" strokeLinecap="round" />
+                  <path d="M16 8l2-2 2 2M8 16l-2 2-2-2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {syncing ? "Syncing…" : "Sync all to cloud"}
+              </button>
+            )}
+            <button
+              onClick={() => { setShowAdd(true); setEditingId(null); setForm(EMPTY_FORM); setFormError(""); }}
+              className="flex items-center gap-2 rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0c2030]"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+              </svg>
+              Add room
+            </button>
+          </div>
         </div>
+
+        {/* Cloud sync result — tells the admin whether patients on other devices
+            can actually see these rooms. No more silent failures. */}
+        {syncMsg && (
+          <div className={`mb-5 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
+            syncOk
+              ? "border-success/30 bg-success/5 text-success"
+              : "border-coral/30 bg-coral/5 text-coral"
+          }`}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 shrink-0">
+              {syncOk
+                ? <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                : <><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" strokeLinecap="round" /></>}
+            </svg>
+            <span className="font-medium">{syncMsg}</span>
+          </div>
+        )}
+        {!signedIn && (
+          <div className="mb-5 rounded-xl border border-amber/30 bg-amber/5 px-4 py-3 text-sm font-medium text-amber">
+            You&apos;re not signed in, so rooms stay on this device only. Sign in to publish rooms so patients on other phones can see them.
+          </div>
+        )}
 
         {/* Add form */}
         {showAdd && (
