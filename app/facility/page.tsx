@@ -18,7 +18,10 @@ export default function FacilityPage() {
   const [copied, setCopied] = useState<"nurse" | "patient" | null>(null);
 
   useEffect(() => {
-    if (mounted && !getTherapistSession()) router.replace("/dashboard");
+    if (!mounted) return;
+    // Tenant isolation: require a staff session for a facility this account owns.
+    const s = getTherapistSession();
+    if (!s || !getStore().ownsFacility(s.facilityId)) router.replace("/dashboard");
   }, [mounted, router]);
 
   if (!mounted) {
@@ -32,7 +35,7 @@ export default function FacilityPage() {
   }
 
   const therapistSession = getTherapistSession();
-  if (!therapistSession) return null;
+  if (!therapistSession || !getStore().ownsFacility(therapistSession.facilityId)) return null;
   const facilityId = therapistSession.facilityId;
   const userName = therapistSession.name;
   const ws = getStore().getWorkspace(facilityId);

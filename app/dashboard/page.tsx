@@ -106,10 +106,17 @@ export default function DashboardPage() {
 
   if (!signedIn) return null;
 
-  const session = getTherapistSession();
   const store = getStore();
-  const ws = session ? store.getWorkspace(session.facilityId) : null;
-  const hasFacility = Boolean(ws) || Boolean(profile?.facilityName);
+  // Tenant isolation: only resolve a facility this account actually owns.
+  const session = getTherapistSession();
+  const ownedFacilityId =
+    session && store.ownsFacility(session.facilityId)
+      ? session.facilityId
+      : store.ownsFacility(profile?.facilityId)
+        ? profile!.facilityId!
+        : store.listFacilities()[0]?.id ?? null;
+  const ws = ownedFacilityId ? store.getWorkspace(ownedFacilityId) : null;
+  const hasFacility = Boolean(ws);
   const activeRequests = ws ? ws.requests.filter(isActive) : [];
   const urgentCount = activeRequests.filter((r) => r.priority === "Urgent").length;
 

@@ -61,6 +61,13 @@ export interface Facility {
   roomCount: number;
   teamName: string;
   createdAt: string;
+  /**
+   * Supabase user id of the account that owns this facility.
+   * Tenant-isolation boundary: only the owner sees the facility in their
+   * facility list. Facilities with no ownerId are orphaned (legacy) and are
+   * invisible to every account until explicitly claimed.
+   */
+  ownerId?: string;
   /** Optional real location, auto-filled from the CMS directory. */
   address?: string;
   city?: string;

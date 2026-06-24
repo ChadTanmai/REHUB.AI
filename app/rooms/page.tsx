@@ -60,9 +60,14 @@ export default function RoomsPage() {
   if (!mounted) return <div className="min-h-screen bg-offwhite" />;
 
   const store = getStore();
+  // Tenant isolation: only operate on a facility this account owns.
   const session = getTherapistSession();
   const facilityId =
-    session?.facilityId ?? profile?.facilityId ?? null;
+    session && store.ownsFacility(session.facilityId)
+      ? session.facilityId
+      : store.ownsFacility(profile?.facilityId)
+        ? profile!.facilityId!
+        : store.listFacilities()[0]?.id ?? null;
 
   if (!facilityId) {
     return (

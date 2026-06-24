@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getAuthClient } from "./supabase-browser";
+import { getStore } from "@/lib/store";
 
 const SUPABASE_ENABLED =
   Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
@@ -55,9 +56,37 @@ function profileFromUser(user: User | null): AuthProfile | null {
   };
 }
 
+/**
+ * Bind the local workspace store to the authenticated account and reconcile
+ * the user's own facility. This is the tenant-isolation boundary on the client:
+ *   1. The store only ever lists facilities owned by this user id.
+ *   2. The user's Supabase-metadata facility (if any) is claimed/validated so
+ *      it shows up for them — and only them.
+ *   3. Stale staff sessions from a previous account are purged.
+ */
+function bindStoreToUser(user: User | null) {
+  if (typeof window === "undefined") return;
+  const store = getStore();
+  const ownerId = user?.id ?? null;
+  store.setOwner(ownerId);
+  if (ownerId) {
+    const metaFacilityId = (user?.user_metadata?.facility_id as string) ?? null;
+    if (metaFacilityId) {
+      // Re-associate the user's own facility (orphan-claim is a no-op if it's
+      // already owned by them, and refuses if owned by someone else).
+      store.claimFacility(metaFacilityId, ownerId);
+    }
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(SUPABASE_ENABLED);
+
+  // Keep the workspace store scoped to the current account at all times.
+  useEffect(() => {
+    bindStoreToUser(user);
+  }, [user]);
 
   const refresh = useCallback(async () => {
     if (!SUPABASE_ENABLED) {
@@ -89,23 +118,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  const clearLocalSessions = () => {
+    if (typeof window === "undefined") return;
+    // Correct session keys (lib/session.ts). The staff session must be cleared
+    // so the next account that signs in on this browser starts clean.
+    localStorage.removeItem("rehub:session:therapist");
+    sessionStorage.removeItem("rehub:intro-seen");
+    // Re-scope the store to "no owner" so no facility is visible while signed out.
+    getStore().setOwner(null);
+  };
+
   const signOut = useCallback(async () => {
     if (SUPABASE_ENABLED) await getAuthClient().auth.signOut();
     setUser(null);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("rehub:therapist");
-      localStorage.removeItem("rehub:room");
-      sessionStorage.removeItem("rehub:intro-seen");
-    }
+    clearLocalSessions();
   }, []);
 
   const signOutAllDevices = useCallback(async () => {
     if (SUPABASE_ENABLED) await getAuthClient().auth.signOut({ scope: "global" });
     setUser(null);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("rehub:therapist");
-      localStorage.removeItem("rehub:room");
-    }
+    clearLocalSessions();
   }, []);
 
   return (

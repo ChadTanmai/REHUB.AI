@@ -85,6 +85,8 @@ class RehubStore {
   private listeners = new Set<Listener>();
   private version = 0;
   private channel: BroadcastChannel | null = null;
+  /** Supabase user id of the currently authenticated account (tenant boundary). */
+  private currentOwnerId: string | null = null;
 
   constructor() {
     // Purge expired demo facilities on every init so old demo data never persists.
@@ -116,6 +118,95 @@ class RehubStore {
   };
 
   getVersion = (): number => this.version;
+
+  // --- tenant isolation (owner scoping) ---
+
+  /**
+   * Bind the store to the authenticated account. Every facility the user can
+   * see is filtered by this owner id. Switching accounts (or signing out)
+   * re-scopes the store and drops any local session that points at a facility
+   * the new owner does not own — preventing cross-account data leakage.
+   */
+  setOwner(ownerId: string | null) {
+    if (this.currentOwnerId === ownerId) return;
+    this.currentOwnerId = ownerId;
+    this.purgeForeignSessions();
+    this.emit();
+  }
+
+  getOwner(): string | null {
+    return this.currentOwnerId;
+  }
+
+  /** True when the facility exists and belongs to the current owner. */
+  ownsFacility(facilityId: string | null | undefined): boolean {
+    if (!facilityId || !this.currentOwnerId) return false;
+    const facility = this.loadFacilityMeta(facilityId);
+    return facility?.ownerId === this.currentOwnerId;
+  }
+
+  /**
+   * Claim an orphaned facility (no ownerId) for the current owner.
+   * Used to re-associate a user's own Supabase-metadata facility after the
+   * ownerId field was introduced. Refuses to claim a facility already owned
+   * by a different account.
+   */
+  claimFacility(facilityId: string, ownerId: string): boolean {
+    const ws = this.workspaces.get(facilityId) ?? this.tryLoadWorkspace(facilityId);
+    if (!ws) return false;
+    if (ws.facility.ownerId && ws.facility.ownerId !== ownerId) return false;
+    if (ws.facility.ownerId === ownerId) return true;
+    ws.facility.ownerId = ownerId;
+    this.workspaces.set(facilityId, ws);
+    this.persist(facilityId, false);
+    this.emit();
+    return true;
+  }
+
+  /** Read just a facility's metadata from memory or storage (no side effects). */
+  private loadFacilityMeta(facilityId: string): Facility | null {
+    const inMem = this.workspaces.get(facilityId);
+    if (inMem) return inMem.facility;
+    const ws = this.tryLoadWorkspace(facilityId);
+    return ws?.facility ?? null;
+  }
+
+  private tryLoadWorkspace(facilityId: string): FacilityWorkspace | null {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw =
+        localStorage.getItem(storageKey(facilityId)) ??
+        localStorage.getItem(storageKey(facilityId, true));
+      if (!raw) return null;
+      return JSON.parse(raw) as FacilityWorkspace;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Clear the therapist (staff) session when it points at a facility the
+   * current account does not own. Runs whenever the owner changes, so a stale
+   * session from a previously signed-in account can never leak its facility.
+   *
+   * Room and patient sessions are device-local kiosk pairings (the device is
+   * physically bound to one room) and are intentionally left untouched by
+   * admin sign-in/out.
+   */
+  private purgeForeignSessions() {
+    if (typeof window === "undefined") return;
+    const key = "rehub:session:therapist";
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const session = JSON.parse(raw) as { facilityId?: string };
+      if (!this.currentOwnerId || !this.ownsFacility(session.facilityId)) {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      localStorage.removeItem(key);
+    }
+  }
 
   private emit() {
     this.version += 1;
@@ -203,12 +294,25 @@ class RehubStore {
     return this.ensureFacility(facilityId);
   }
 
-  /** List every real (non-demo) facility found in memory + localStorage. */
+  /**
+   * List facilities owned by the current account ONLY.
+   *
+   * Tenant isolation: a facility is returned only when its ownerId matches the
+   * authenticated user. Orphaned facilities (no ownerId) and facilities owned
+   * by other accounts are never returned. When no account is bound, returns [].
+   */
   listFacilities(): Facility[] {
+    if (!this.currentOwnerId) return [];
+    const owner = this.currentOwnerId;
     const byId = new Map<string, Facility>();
+
+    const consider = (facility: Facility) => {
+      if (facility.ownerId === owner) byId.set(facility.id, facility);
+    };
+
     for (const ws of this.workspaces.values()) {
       if ((ws as { _isDemo?: boolean })._isDemo) continue;
-      byId.set(ws.facility.id, ws.facility);
+      consider(ws.facility);
     }
     if (typeof window !== "undefined") {
       for (let i = 0; i < localStorage.length; i++) {
@@ -216,7 +320,7 @@ class RehubStore {
         if (!key?.startsWith(STORAGE_PREFIX)) continue;
         try {
           const ws = JSON.parse(localStorage.getItem(key)!) as FacilityWorkspace;
-          if (!byId.has(ws.facility.id)) byId.set(ws.facility.id, ws.facility);
+          if (!byId.has(ws.facility.id)) consider(ws.facility);
         } catch {
           /* ignore */
         }
@@ -341,6 +445,8 @@ class RehubStore {
       roomCount: Math.max(0, Math.min(500, Math.floor(input.roomCount) || 0)),
       teamName: sanitizeField(input.teamName, 80) || "Care Team",
       createdAt: new Date().toISOString(),
+      // Bind the new facility to the authenticated account that created it.
+      ownerId: this.currentOwnerId ?? undefined,
       address: input.address ? sanitizeField(input.address, 120) : undefined,
       city: input.city ? sanitizeField(input.city, 60) : undefined,
       state: input.state ? sanitizeField(input.state, 4) : undefined,
