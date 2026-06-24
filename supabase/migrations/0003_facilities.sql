@@ -22,13 +22,19 @@ alter table facilities enable row level security;
 
 -- ─── Facility Members ──────────────────────────────────────────────────────
 
-create type if not exists facility_member_role as enum (
-  'owner', 'admin', 'nurse', 'therapist', 'aide', 'patient'
-);
+do $$ begin
+  create type facility_member_role as enum (
+    'owner', 'admin', 'nurse', 'therapist', 'aide', 'patient'
+  );
+exception when duplicate_object then null;
+end $$;
 
-create type if not exists facility_member_status as enum (
-  'active', 'pending', 'suspended'
-);
+do $$ begin
+  create type facility_member_status as enum (
+    'active', 'pending', 'suspended'
+  );
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists facility_members (
   id              uuid primary key default gen_random_uuid(),
