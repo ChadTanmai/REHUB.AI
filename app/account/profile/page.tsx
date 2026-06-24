@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import AppNav from "@/components/AppNav";
 import { SiteFooter } from "@/components/SiteNav";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -105,7 +106,13 @@ export default function ProfilePage() {
 
           {/* Read-only org info */}
           <div className="mt-6 rounded-2xl border border-gray-muted bg-white p-6 shadow-soft">
-            <h2 className="text-base font-semibold text-navy">Organization</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-navy">Organization</h2>
+              <Link href="/account/facilities"
+                className="rounded-lg border border-gray-muted px-3 py-1.5 text-xs font-semibold text-navy hover:bg-offwhite">
+                Manage facilities
+              </Link>
+            </div>
             <dl className="mt-4 space-y-3 text-sm">
               <Row label="Facility" value={profile.facilityName || "Not set up yet"} />
               <Row label="Role" value={profile.role.replace(/_/g, " ")} />

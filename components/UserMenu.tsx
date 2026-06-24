@@ -17,6 +17,7 @@ function initials(name: string) {
 const MENU_ITEMS = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Profile", href: "/account/profile" },
+  { label: "Manage facilities", href: "/account/facilities" },
   { label: "Settings", href: "/account/settings" },
   { label: "Facility", href: "/facility" },
   { label: "Help & Support", href: "/contact" },

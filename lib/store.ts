@@ -203,6 +203,65 @@ class RehubStore {
     return this.ensureFacility(facilityId);
   }
 
+  /** List every real (non-demo) facility found in memory + localStorage. */
+  listFacilities(): Facility[] {
+    const byId = new Map<string, Facility>();
+    for (const ws of this.workspaces.values()) {
+      if ((ws as { _isDemo?: boolean })._isDemo) continue;
+      byId.set(ws.facility.id, ws.facility);
+    }
+    if (typeof window !== "undefined") {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith(STORAGE_PREFIX)) continue;
+        try {
+          const ws = JSON.parse(localStorage.getItem(key)!) as FacilityWorkspace;
+          if (!byId.has(ws.facility.id)) byId.set(ws.facility.id, ws.facility);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) =>
+      (a.createdAt ?? "").localeCompare(b.createdAt ?? ""),
+    );
+  }
+
+  /** Update facility metadata (name, code, team name, contact). */
+  updateFacility(
+    facilityId: string,
+    patch: Partial<Pick<Facility, "name" | "facilityCode" | "teamName" | "address" | "city" | "state" | "zip" | "phone">>,
+  ): Facility | null {
+    const ws = this.ensureFacility(facilityId);
+    if (patch.name !== undefined) ws.facility.name = sanitizeField(patch.name, 80) || ws.facility.name;
+    if (patch.facilityCode !== undefined) ws.facility.facilityCode = patch.facilityCode.trim().toUpperCase();
+    if (patch.teamName !== undefined) ws.facility.teamName = sanitizeField(patch.teamName, 80) || ws.facility.teamName;
+    if (patch.address !== undefined) ws.facility.address = sanitizeField(patch.address, 120);
+    if (patch.city !== undefined) ws.facility.city = sanitizeField(patch.city, 60);
+    if (patch.state !== undefined) ws.facility.state = sanitizeField(patch.state, 4);
+    if (patch.zip !== undefined) ws.facility.zip = sanitizeField(patch.zip, 10);
+    if (patch.phone !== undefined) ws.facility.phone = sanitizeField(patch.phone, 24);
+    this.persist(facilityId);
+    this.emit();
+    return ws.facility;
+  }
+
+  /** Permanently delete a facility and all its workspace data. */
+  deleteFacility(facilityId: string): boolean {
+    this.workspaces.delete(facilityId);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem(storageKey(facilityId));
+        localStorage.removeItem(storageKey(facilityId, true));
+      } catch {
+        /* ignore */
+      }
+    }
+    if (this.channel) this.channel.postMessage({ facilityId });
+    this.emit();
+    return true;
+  }
+
   /** Resolve a facility id from a (case-insensitive) facility code. */
   facilityIdForCode(code: string): string | null {
     const normalized = code.trim().toUpperCase();
