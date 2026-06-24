@@ -2,6 +2,18 @@
 -- Patients are unauthenticated, so they insert via a SECURITY DEFINER RPC.
 -- Nurses (facility owners) read/update via RLS and receive live updates via
 -- Supabase Realtime. Safe to run more than once.
+--
+-- Note: only depends on facilities.owner_id (always present). It does NOT touch
+-- facility_members, avoiding schema-mismatch errors there.
+
+set check_function_bodies = off;
+
+-- Owner check (relies only on facilities.owner_id).
+create or replace function is_facility_owner(fid uuid)
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists(select 1 from facilities where id = fid and owner_id = auth.uid());
+$$;
+grant execute on function is_facility_owner(uuid) to authenticated;
 
 create table if not exists requests (
   id                uuid primary key default gen_random_uuid(),
@@ -25,23 +37,19 @@ create index if not exists idx_requests_facility on requests (facility_id, creat
 
 alter table requests enable row level security;
 
--- Nurses can read their facility's requests.
 do $$ begin
   create policy "requests_owner_select" on requests
-    for select to authenticated
-    using (is_facility_owner(facility_id) or is_facility_member(facility_id));
+    for select to authenticated using (is_facility_owner(facility_id));
 exception when duplicate_object then null; end $$;
 
--- Nurses can update status on their facility's requests.
 do $$ begin
   create policy "requests_owner_update" on requests
     for update to authenticated
-    using (is_facility_owner(facility_id) or is_facility_member(facility_id))
-    with check (is_facility_owner(facility_id) or is_facility_member(facility_id));
+    using (is_facility_owner(facility_id))
+    with check (is_facility_owner(facility_id));
 exception when duplicate_object then null; end $$;
 
--- Public submit (patients have no account): validate the facility by code,
--- then insert. Runs as definer so it bypasses RLS safely.
+-- Public submit (patients have no account).
 create or replace function submit_patient_request(
   p_facility_code   text,
   p_room_id         uuid,
@@ -68,7 +76,8 @@ begin
     facility_id, room_id, room_number, resident_name, text, source,
     request_type, priority, urgency_level, triage_reason, suggested_action, status
   ) values (
-    fid, p_room_id, p_room_number, left(coalesce(p_resident_name,''),80), left(coalesce(p_text,''),500), p_source,
+    fid, p_room_id, p_room_number, left(coalesce(p_resident_name,''),80),
+    left(coalesce(p_text,''),500), p_source,
     p_request_type, p_priority, p_urgency_level, p_triage_reason, p_suggested_action, 'New'
   ) returning id into rid;
   return rid;
@@ -77,7 +86,6 @@ end $$;
 grant execute on function submit_patient_request(text,uuid,text,text,text,text,text,text,text,text,text)
   to anon, authenticated;
 
--- Enable Realtime so the dashboard gets live inserts/updates.
 do $$ begin
   alter publication supabase_realtime add table requests;
 exception when duplicate_object then null; when others then null; end $$;
