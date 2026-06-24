@@ -797,6 +797,67 @@ class RehubStore {
     return req;
   }
 
+  /**
+   * Merge a request that arrived from Supabase Realtime (a patient on another
+   * device) into the local workspace. Upserts by id and emits so the command
+   * center updates live.
+   */
+  ingestRemoteRequest(facilityId: string, r: {
+    id: string;
+    roomId: string | null;
+    roomNumber: string | null;
+    residentName: string | null;
+    text: string | null;
+    source: string | null;
+    requestType: string | null;
+    priority: string | null;
+    urgencyLevel: import("./types").UrgencyLevel | null;
+    triageReason: string | null;
+    suggestedAction: string | null;
+    status: string;
+    createdAt: string;
+    acknowledgedAt: string | null;
+    resolvedAt: string | null;
+  }): void {
+    const ws = this.ensureFacility(facilityId);
+    const existing = ws.requests.find((x) => x.id === r.id);
+    const priority = (["Routine", "Important", "Urgent"].includes(r.priority ?? "")
+      ? r.priority : "Routine") as Request["priority"];
+    const status = (["New", "Acknowledged", "In Progress", "Resolved"].includes(r.status)
+      ? r.status : "New") as Status;
+    const merged: Request = {
+      id: r.id,
+      facilityId,
+      roomId: r.roomId ?? "",
+      roomNumber: r.roomNumber ?? "—",
+      residentName: r.residentName ?? "Patient",
+      requestType: (r.requestType ?? "Help") as Request["requestType"],
+      priority,
+      priorityScore: existing?.priorityScore ?? 0,
+      urgencyLevel: r.urgencyLevel ?? existing?.urgencyLevel,
+      triageReason: r.triageReason ?? existing?.triageReason,
+      suggestedAction: r.suggestedAction ?? existing?.suggestedAction,
+      status,
+      notes: existing?.notes ?? r.triageReason ?? "",
+      aiSummary: existing?.aiSummary ?? r.text ?? "",
+      source: (r.source ?? "Voice") as Request["source"],
+      transcript: r.text ?? existing?.transcript,
+      aiConfidence: existing?.aiConfidence ?? 0.8,
+      detectedKeywords: existing?.detectedKeywords ?? [],
+      safetyFlag: r.urgencyLevel === "Critical" || (existing?.safetyFlag ?? false),
+      createdAt: r.createdAt,
+      acknowledgedAt: r.acknowledgedAt ?? existing?.acknowledgedAt,
+      resolvedAt: r.resolvedAt ?? existing?.resolvedAt,
+    };
+    if (existing) {
+      Object.assign(existing, merged);
+    } else {
+      ws.requests.push(merged);
+    }
+    this.persist(facilityId, false);
+    this.emit();
+  }
+
   /** Claim a request without changing status ("Assign to Me"). */
   assignRequest(
     facilityId: string,

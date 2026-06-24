@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getPatientSession, clearPatientSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
+import { submitPatientRequest } from "@/lib/supabase/requests";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,7 +148,22 @@ export default function PatientPage() {
 
   function sendRequest(source: "Button" | "Voice" | "Typed", text: string) {
     if (!room) return;
-    store.submitRequest({ facilityId, roomId, source, text: text || undefined });
+    const req = store.submitRequest({ facilityId, roomId, source, text: text || undefined });
+    // Publish to Supabase so the nurse command center receives it live, even on
+    // a different device/network. Fire-and-forget.
+    submitPatientRequest({
+      facilityCode: session!.facilityCode,
+      roomId: req.roomId,
+      roomNumber: req.roomNumber,
+      residentName: req.residentName,
+      text: req.transcript ?? "",
+      source: req.source,
+      requestType: req.requestType,
+      priority: req.priority,
+      urgencyLevel: req.urgencyLevel ?? "Medium",
+      triageReason: req.triageReason ?? "",
+      suggestedAction: req.suggestedAction ?? "",
+    }).catch(() => {});
     setSubmitted(true);
     setTranscript("");
     transcriptRef.current = "";
