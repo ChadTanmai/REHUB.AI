@@ -7,13 +7,16 @@ import { Suspense } from "react";
 import AuthCard from "@/components/auth/AuthCard";
 import GoogleButton from "@/components/auth/GoogleButton";
 import { getAuthClient } from "@/lib/auth/supabase-browser";
+import { getStore } from "@/lib/store";
+import { saveTherapistSession, saveRoomSession } from "@/lib/session";
+import { normalizeFacilityCode } from "@/lib/security";
 
 function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/dashboard";
   const errorParam = params.get("error");
-  const mode = params.get("mode"); // "patient" for patient flow
+  const mode = params.get("mode");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,18 +29,20 @@ function SignInForm() {
     mode === "patient" ? "patient" : "choose",
   );
 
+  // Patient join state
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+
   const supabase = getAuthClient();
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     const { error: err } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
     });
-
     setLoading(false);
     if (err) {
       setError(
@@ -66,6 +71,37 @@ function SignInForm() {
       setGoogleLoading(false);
     }
   }
+
+  function handleJoin(e: React.FormEvent) {
+    e.preventDefault();
+    setJoinError("");
+    const code = normalizeFacilityCode(joinCode);
+    if (!code) { setJoinError("Enter a facility code."); return; }
+    const store = getStore();
+    const facilityId = store.facilityIdForCode(code);
+    if (!facilityId) {
+      setJoinError("That code doesn't match any facility. Check with your administrator.");
+      return;
+    }
+    const ws = store.getWorkspace(facilityId);
+    const room = ws.rooms[0];
+    if (!room) {
+      setJoinError("No rooms are set up yet. Ask your administrator to add rooms first.");
+      return;
+    }
+    saveRoomSession({
+      deviceType: "room",
+      facilityId,
+      facilityCode: ws.facility.facilityCode,
+      roomId: room.id,
+      roomNumber: room.roomNumber,
+      displayName: room.displayName,
+      pairedAt: new Date().toISOString(),
+    });
+    router.push(`/room/${room.id}`);
+  }
+
+  // ── Role chooser ──────────────────────────────────────────────────────────
 
   if (view === "choose") {
     return (
@@ -109,10 +145,13 @@ function SignInForm() {
     );
   }
 
+  // ── Patient — inline code entry ───────────────────────────────────────────
+
   if (view === "patient") {
     return (
-      <div className="space-y-4">
+      <form onSubmit={handleJoin} className="space-y-4">
         <button
+          type="button"
           onClick={() => setView("choose")}
           className="flex items-center gap-1.5 text-sm text-slate/60 hover:text-navy"
         >
@@ -122,35 +161,40 @@ function SignInForm() {
           Back
         </button>
 
-        <div className="rounded-xl border border-teal/30 bg-teal/5 p-4">
-          <p className="text-sm font-semibold text-navy">Patient room access</p>
-          <p className="mt-1 text-sm text-slate/70">
-            Patient rooms are set up by your facility administrator. You don&apos;t need an account.
+        <div>
+          <p className="font-semibold text-navy">Enter your facility code</p>
+          <p className="mt-0.5 text-sm text-slate/60">
+            Your nurse or administrator will have given you this code.
           </p>
         </div>
 
-        <p className="text-sm text-slate">
-          To access a patient room, your nurse or administrator should have given you a room link or QR code.
-        </p>
-
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-slate">Have a facility join code?</p>
-          <Link
-            href="/join"
-            className="block w-full rounded-lg border border-gray-muted bg-white px-4 py-3 text-center text-sm font-semibold text-navy hover:bg-offwhite"
-          >
-            Join with facility code
-          </Link>
+        <div>
+          <input
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            placeholder="e.g. MAPLE-01"
+            className="input text-center font-mono text-lg tracking-widest"
+            autoFocus
+            autoComplete="off"
+          />
         </div>
 
-        <div className="border-t border-gray-muted pt-4">
-          <p className="text-sm text-slate/60">
-            Looking for the care request screen? Ask your nurse for the room tablet or the room link.
-          </p>
-        </div>
-      </div>
+        {joinError && (
+          <p className="rounded-lg bg-coral/10 px-3 py-2 text-sm text-coral">{joinError}</p>
+        )}
+
+        <button
+          type="submit"
+          disabled={!joinCode.trim()}
+          className="w-full rounded-lg bg-teal py-3 text-sm font-semibold text-white hover:bg-[#2a8d8d] disabled:opacity-40"
+        >
+          Open room screen
+        </button>
+      </form>
     );
   }
+
+  // ── Staff sign-in form ────────────────────────────────────────────────────
 
   return (
     <form onSubmit={handleSignIn} className="space-y-4">
