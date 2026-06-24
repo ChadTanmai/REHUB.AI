@@ -185,15 +185,20 @@ export async function saveUserFacilityToMeta(facilityId: string, facilityName: s
  * the authenticated client so RLS (owner_id = auth.uid()) is satisfied. This is
  * what makes a facility findable from another device by its code.
  */
+export interface SyncResult {
+  ok: boolean;
+  error: string | null;
+}
+
 export async function upsertFacilityFromStore(params: {
   id: string;
   name: string;
   facilityCode: string;
   teamName?: string;
-}): Promise<boolean> {
+}): Promise<SyncResult> {
   const supabase = getAuthClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
+  if (!user) return { ok: false, error: "Not signed in (no Supabase session)." };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
@@ -208,7 +213,7 @@ export async function upsertFacilityFromStore(params: {
       },
       { onConflict: "id" },
     );
-  return !error;
+  return { ok: !error, error: error ? `${error.code ?? ""} ${error.message ?? error}`.trim() : null };
 }
 
 /** Upsert one room for a facility the user owns. Ids must be UUIDs. */
@@ -218,7 +223,7 @@ export async function upsertRoom(params: {
   roomNumber: string;
   displayName: string;
   active?: boolean;
-}): Promise<boolean> {
+}): Promise<SyncResult> {
   const supabase = getAuthClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
@@ -233,7 +238,7 @@ export async function upsertRoom(params: {
       },
       { onConflict: "id" },
     );
-  return !error;
+  return { ok: !error, error: error ? `${error.code ?? ""} ${error.message ?? error}`.trim() : null };
 }
 
 export interface PublicFacility {

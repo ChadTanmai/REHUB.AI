@@ -9,7 +9,7 @@ import { getStore } from "@/lib/store";
 import { getTherapistSession, saveTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { saveUserFacilityToMeta, upsertFacilityFromStore } from "@/lib/supabase/facilities";
+import { saveUserFacilityToMeta, upsertFacilityFromStore, upsertRoom } from "@/lib/supabase/facilities";
 import { generateFacilityCode } from "@/lib/facilityCode";
 import type { Facility } from "@/lib/types";
 
@@ -26,6 +26,8 @@ export default function ManageFacilitiesPage() {
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const [syncMsg, setSyncMsg] = useState<{ id: string; ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     if (!loading && !signedIn) router.replace("/auth/signin");
@@ -64,7 +66,7 @@ export default function ManageFacilitiesPage() {
     return "";
   }
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const err = validate();
     if (err) { setFormError(err); return; }
@@ -79,14 +81,20 @@ export default function ManageFacilitiesPage() {
       roomCount: 0,
       teamName: form.teamName.trim() || "Care Team",
     });
-    // Publish to Supabase so the code works from any device.
+    // Publish to Supabase so the code works from any device. Await + surface
+    // any error so cloud-sync failures are visible instead of silent.
     if (signedIn) {
-      upsertFacilityFromStore({
+      const res = await upsertFacilityFromStore({
         id: facility.id,
         name: facility.name,
         facilityCode: facility.facilityCode,
         teamName: facility.teamName,
-      }).catch(() => {});
+      }).catch((e) => ({ ok: false, error: String(e) }));
+      if (!res.ok) {
+        setFormError(`Created locally, but cloud sync failed: ${res.error}. Patients on other devices won't find it until this is fixed.`);
+        // Keep the form context so the message is seen; facility still exists locally.
+        return;
+      }
     }
     setCreating(false);
     setForm(EMPTY);
@@ -117,6 +125,37 @@ export default function ManageFacilitiesPage() {
   function handleDelete(id: string) {
     store.deleteFacility(id);
     setDeleteConfirm(null);
+  }
+
+  async function handlePublish(f: Facility) {
+    setSyncing(f.id);
+    setSyncMsg(null);
+    const facRes = await upsertFacilityFromStore({
+      id: f.id, name: f.name, facilityCode: f.facilityCode, teamName: f.teamName,
+    }).catch((e) => ({ ok: false, error: String(e) }));
+
+    if (!facRes.ok) {
+      setSyncMsg({ id: f.id, ok: false, text: `Facility sync failed: ${facRes.error}` });
+      setSyncing(null);
+      return;
+    }
+
+    // Push all rooms too.
+    const rooms = store.getWorkspace(f.id).rooms;
+    let roomErr: string | null = null;
+    for (const r of rooms) {
+      const rr = await upsertRoom({
+        id: r.id, facilityId: f.id, roomNumber: r.roomNumber, displayName: r.displayName, active: r.active,
+      }).catch((e) => ({ ok: false, error: String(e) }));
+      if (!rr.ok) { roomErr = rr.error; break; }
+    }
+
+    if (roomErr) {
+      setSyncMsg({ id: f.id, ok: false, text: `Facility OK, but room sync failed: ${roomErr}` });
+    } else {
+      setSyncMsg({ id: f.id, ok: true, text: `Published ${f.facilityCode} with ${rooms.length} room${rooms.length !== 1 ? "s" : ""}. Cross-device join is ready.` });
+    }
+    setSyncing(null);
   }
 
   async function handleSetActive(f: Facility) {
@@ -263,6 +302,10 @@ export default function ManageFacilitiesPage() {
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
+                        <button onClick={() => handlePublish(f)} disabled={syncing === f.id}
+                          className="rounded-lg px-3 py-1.5 text-xs font-semibold text-navy hover:bg-navy/5 disabled:opacity-50">
+                          {syncing === f.id ? "Publishing…" : "Publish to cloud"}
+                        </button>
                         {!isActive && (
                           <button onClick={() => handleSetActive(f)}
                             className="rounded-lg px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal/5">
@@ -295,6 +338,11 @@ export default function ManageFacilitiesPage() {
                     {deleteConfirm === f.id && (
                       <p className="mt-3 rounded-lg bg-coral/5 px-3 py-2 text-xs text-coral">
                         This permanently removes <span className="font-semibold">{f.name}</span> and all its rooms, requests, and history. This cannot be undone.
+                      </p>
+                    )}
+                    {syncMsg?.id === f.id && (
+                      <p className={`mt-3 rounded-lg px-3 py-2 text-xs ${syncMsg.ok ? "bg-success/10 text-success" : "bg-coral/10 text-coral"}`}>
+                        {syncMsg.text}
                       </p>
                     )}
                   </div>

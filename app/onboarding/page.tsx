@@ -140,14 +140,14 @@ export default function OnboardingPage() {
     // Persist to Supabase if authenticated, using the SAME ids as the local
     // store so the facility + rooms are findable from any device by code.
     if (signedIn) {
-      const ok = await upsertFacilityFromStore({
+      const res = await upsertFacilityFromStore({
         id: facility.id,
         name: facility.name,
         facilityCode: facility.facilityCode,
         teamName: facility.teamName,
-      }).catch(() => false);
+      }).catch((e) => ({ ok: false, error: String(e) }));
 
-      if (ok) {
+      if (res.ok) {
         await Promise.all(
           createdRooms.map((r) =>
             upsertRoom({
@@ -156,7 +156,7 @@ export default function OnboardingPage() {
               roomNumber: r.roomNumber,
               displayName: r.displayName,
               active: r.active,
-            }).catch(() => false),
+            }).catch(() => ({ ok: false, error: "room sync failed" })),
           ),
         );
         await saveUserFacilityToMeta(facility.id, facility.name).catch(() => {});
