@@ -123,10 +123,11 @@ function JoinFlow() {
   const mounted = useMounted();
 
   const urlCode = normalizeFacilityCode(params.get("code") ?? "");
+  const urlRole: JoinRole = params.get("role") === "nurse" ? "nurse" : "patient";
 
   const [step, setStep] = useState<Step>(urlCode ? "lookup" : "code");
   const [inputCode, setInputCode] = useState(urlCode);
-  const [role, setRole] = useState<JoinRole>("patient");
+  const [role, setRole] = useState<JoinRole>(urlRole);
   const [facility, setFacility] = useState<FacilityLookupResult | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [patientName, setPatientName] = useState("");

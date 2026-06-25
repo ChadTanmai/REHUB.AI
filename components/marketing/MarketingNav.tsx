@@ -82,7 +82,7 @@ export default function MarketingNav() {
                 Sign in
               </Link>
               <Link
-                href="/auth/signup"
+                href="/get-started"
                 className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white shadow-soft transition-all hover:bg-[#0c2030] hover:shadow-panel"
               >
                 Get started
@@ -155,7 +155,7 @@ export default function MarketingNav() {
                     Sign in
                   </Link>
                   <Link
-                    href="/auth/signup"
+                    href="/get-started"
                     onClick={() => setOpen(false)}
                     className="flex-1 rounded-lg bg-navy px-4 py-2.5 text-center text-sm font-semibold text-white"
                   >

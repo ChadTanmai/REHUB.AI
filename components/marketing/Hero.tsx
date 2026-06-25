@@ -53,7 +53,7 @@ export default function Hero() {
                 Try the live demo
               </Link>
               <Link
-                href="/auth/signup"
+                href="/get-started"
                 className="rounded-lg border border-gray-muted bg-white px-6 py-3 text-base font-semibold text-navy transition-colors hover:bg-offwhite"
               >
                 Get started
