@@ -137,15 +137,20 @@ export async function fetchFacilityRequests(facilityId: string): Promise<RemoteR
   return (await fetchFacilityRequestsDiag(facilityId)).rows;
 }
 
-/** Nurse-side: subscribe to live inserts/updates. Returns an unsubscribe fn. */
+/**
+ * Nurse-side: subscribe to live inserts/updates. Returns an unsubscribe fn.
+ * `channelKey` namespaces the channel so multiple independent subscribers (the
+ * full /command page and the global slide-out) don't collide on one channel.
+ */
 export function subscribeFacilityRequests(
   facilityId: string,
   onChange: (r: RemoteRequest) => void,
+  channelKey = "main",
 ): () => void {
   try {
     const supabase = getAuthClient();
     const channel = supabase
-      .channel(`requests:${facilityId}`)
+      .channel(`requests:${channelKey}:${facilityId}`)
       .on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         "postgres_changes" as any,
@@ -162,17 +167,63 @@ export function subscribeFacilityRequests(
   }
 }
 
-/** Nurse-side: update a request's status (acknowledge / in progress / resolve). */
-export async function updateRequestStatus(id: string, status: Status): Promise<boolean> {
+/**
+ * Nurse-side: update a request's status (acknowledge / in progress / resolve).
+ * Records who acknowledged so the patient can be told "Nurse Sarah is on the way".
+ */
+export async function updateRequestStatus(
+  id: string,
+  status: Status,
+  actorName?: string,
+): Promise<boolean> {
   try {
     const supabase = getAuthClient();
     const patch: Record<string, unknown> = { status };
-    if (status === "Acknowledged") patch.acknowledged_at = new Date().toISOString();
-    if (status === "Resolved") patch.resolved_at = new Date().toISOString();
+    const now = new Date().toISOString();
+    if (status === "Acknowledged" || status === "In Progress") {
+      patch.acknowledged_at = now;
+      if (actorName) patch.acknowledged_by = actorName;
+    }
+    if (status === "Resolved") {
+      patch.resolved_at = now;
+      if (actorName) patch.acknowledged_by = actorName;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any).from("patient_messages").update(patch).eq("id", id);
     return !error;
   } catch {
     return false;
+  }
+}
+
+export interface RequestStatusInfo {
+  status: string;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+}
+
+/**
+ * Patient-side (anonymous): poll the live status of a request the patient just
+ * submitted, via a security-definer RPC (no RLS exposure of the table). Lets
+ * the patient device learn when a nurse has acknowledged — and who.
+ */
+export async function getRequestStatus(id: string): Promise<RequestStatusInfo | null> {
+  try {
+    const supabase = getAuthClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc("get_request_status", { p_id: id });
+    if (error || !data) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = data as any;
+    if (!row?.status) return null;
+    return {
+      status: row.status,
+      acknowledgedBy: row.acknowledged_by ?? null,
+      acknowledgedAt: row.acknowledged_at ?? null,
+      resolvedAt: row.resolved_at ?? null,
+    };
+  } catch {
+    return null;
   }
 }

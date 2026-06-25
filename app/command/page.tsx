@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
 import { getStore } from "@/lib/store";
@@ -11,7 +11,6 @@ import { isActive } from "@/lib/requestUtils";
 import { URGENCY_META, type UrgencyLevel, type Request, type Status } from "@/lib/types";
 import {
   fetchFacilityRequestsDiag,
-  subscribeFacilityRequests,
   updateRequestStatus,
 } from "@/lib/supabase/requests";
 
@@ -39,24 +38,6 @@ function UrgencyPill({ level }: { level: UrgencyLevel }) {
   );
 }
 
-// Short beep for critical alerts.
-function beep() {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
-    const ctx = new Ctx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.type = "sine"; o.frequency.value = 880;
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
-    o.start(); o.stop(ctx.currentTime + 0.5);
-    setTimeout(() => ctx.close().catch(() => {}), 700);
-  } catch { /* ignore */ }
-}
-
 export default function CommandCenterPage() {
   const mounted = useMounted();
   const router = useRouter();
@@ -65,7 +46,6 @@ export default function CommandCenterPage() {
 
   const [selectedRoom, setSelectedRoom] = useState<string | "all">("all");
   const [loadError, setLoadError] = useState<string | null>(null);
-  const seenCritical = useRef<Set<string>>(new Set());
 
   const store = getStore();
   const session = mounted ? getTherapistSession() : null;
@@ -76,7 +56,9 @@ export default function CommandCenterPage() {
         ? profile!.facilityId!
         : mounted ? store.listFacilities()[0]?.id ?? null : null;
 
-  // Load + subscribe to realtime requests.
+  // Initial load (for the load-error banner). Live updates + the critical beep
+  // are owned by the global command center (mounted in AppNav), which keeps the
+  // shared store fresh — this page re-renders from it via useStoreVersion.
   useEffect(() => {
     if (!facilityId) return;
     let active = true;
@@ -85,14 +67,7 @@ export default function CommandCenterPage() {
       setLoadError(error);
       rows.forEach((r) => store.ingestRemoteRequest(facilityId, r));
     });
-    const unsub = subscribeFacilityRequests(facilityId, (r) => {
-      store.ingestRemoteRequest(facilityId, r);
-      if (r.urgencyLevel === "Critical" && !seenCritical.current.has(r.id)) {
-        seenCritical.current.add(r.id);
-        beep();
-      }
-    });
-    return () => { active = false; unsub(); };
+    return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 
@@ -142,8 +117,9 @@ export default function CommandCenterPage() {
   });
 
   function setStatus(req: Request, status: Status) {
-    store.transitionRequest(facilityId!, req.id, status, { type: "therapist", name: session?.name ?? "Staff" });
-    updateRequestStatus(req.id, status).catch(() => {});
+    const name = session?.name ?? profile?.displayName ?? "Staff";
+    store.transitionRequest(facilityId!, req.id, status, { type: "therapist", name });
+    updateRequestStatus(req.id, status, name).catch(() => {});
   }
 
   return (

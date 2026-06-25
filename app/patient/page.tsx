@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { getPatientSession, clearPatientSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
 import { enqueueRequest, ensureAutoFlush } from "@/lib/supabase/outbox";
+import { getRequestStatus } from "@/lib/supabase/requests";
+import { primeTTS, speak } from "@/lib/tts";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,7 +22,9 @@ export default function PatientPage() {
   const [view, setView] = useState<AppView>("home");
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  // Request flow: idle → sent (waiting for staff) → ack (acknowledged).
+  const [flow, setFlow] = useState<"idle" | "sent" | "ack">("idle");
+  const [ackBy, setAckBy] = useState<string | null>(null);
   const [amp, setAmp] = useState(0); // 0..1 live voice amplitude
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +34,8 @@ export default function PatientPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const transcriptRef = useRef("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef<number>(0);
 
   // Keep delivering any queued patient requests in the background (retry on
   // reconnect / focus). The timer is a module singleton, so no cleanup needed.
@@ -68,9 +74,48 @@ export default function PatientPage() {
     setAmp(0);
   }
 
+  function stopPolling() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }
+
   function stopEverything() {
     if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
     stopMeter();
+    stopPolling();
+  }
+
+  /**
+   * Poll the cloud for this request's status until a nurse acknowledges (or a
+   * timeout). When acknowledged, show + SPEAK the confirmation with the staff
+   * name. RPC is anon-safe (security definer), so it works on the patient's
+   * un-authenticated device on any network.
+   */
+  function startAckPolling(messageId: string) {
+    stopPolling();
+    pollStartRef.current = Date.now();
+    const check = async () => {
+      const info = await getRequestStatus(messageId);
+      if (!info) {
+        // Give up quietly after ~3 minutes if we never get a reading.
+        if (Date.now() - pollStartRef.current > 180_000) stopPolling();
+        return;
+      }
+      if (info.status === "Acknowledged" || info.status === "In Progress" || info.status === "Resolved") {
+        stopPolling();
+        const name = (info.acknowledgedBy ?? "").trim();
+        setAckBy(name || null);
+        setFlow("ack");
+        speak(name ? `${name} is on the way to help you.` : "Your care team is on the way to help you.");
+      }
+    };
+    void check();
+    pollRef.current = setInterval(check, 3000);
+  }
+
+  function resetFlow() {
+    stopPolling();
+    setFlow("idle");
+    setAckBy(null);
   }
 
   // Live microphone amplitude meter → drives the breathing animation.
@@ -110,6 +155,9 @@ export default function PatientPage() {
   }
 
   function startListening() {
+    // Unlock text-to-speech inside this user gesture so the spoken nurse
+    // confirmation can autoplay later without another tap.
+    primeTTS();
     setTranscript("");
     transcriptRef.current = "";
     setRecording(true);
@@ -145,7 +193,7 @@ export default function PatientPage() {
   }
 
   function toggleTalk() {
-    if (submitted) return;
+    if (flow !== "idle") return;
     if (recording) stopListening();
     else startListening();
   }
@@ -155,24 +203,28 @@ export default function PatientPage() {
     const req = store.submitRequest({ facilityId, roomId, source, text: text || undefined });
     // Deliver to the nurse command center via the durable outbox: it retries on
     // a dropped connection / focus / reconnect so an emergency request is never
-    // silently lost, even on a flaky phone network.
-    void enqueueRequest({
-      facilityCode: session!.facilityCode,
-      roomId: req.roomId,
-      roomNumber: req.roomNumber,
-      residentName: req.residentName,
-      text: req.transcript ?? "",
-      source: req.source,
-      requestType: req.requestType,
-      priority: req.priority,
-      urgencyLevel: req.urgencyLevel ?? "Medium",
-      triageReason: req.triageReason ?? "",
-      suggestedAction: req.suggestedAction ?? "",
-    });
-    setSubmitted(true);
+    // silently lost. When delivered, we get the cloud id back and start polling
+    // for the nurse's acknowledgement.
+    void enqueueRequest(
+      {
+        facilityCode: session!.facilityCode,
+        roomId: req.roomId,
+        roomNumber: req.roomNumber,
+        residentName: req.residentName,
+        text: req.transcript ?? "",
+        source: req.source,
+        requestType: req.requestType,
+        priority: req.priority,
+        urgencyLevel: req.urgencyLevel ?? "Medium",
+        triageReason: req.triageReason ?? "",
+        suggestedAction: req.suggestedAction ?? "",
+      },
+      (remoteId) => startAckPolling(remoteId),
+    );
+    setFlow("sent");
+    setAckBy(null);
     setTranscript("");
     transcriptRef.current = "";
-    setTimeout(() => setSubmitted(false), 4500);
   }
 
   function handleLeave() {
@@ -243,15 +295,35 @@ export default function PatientPage() {
 
       {/* Main */}
       <main className="z-10 flex flex-1 flex-col items-center justify-center px-6">
-        {submitted ? (
+        {flow === "ack" ? (
           <div className="flex flex-col items-center gap-5 text-center">
-            <div className="flex h-28 w-28 items-center justify-center rounded-full" style={{ background: "rgba(34,197,94,0.15)" }}>
+            <div className="flex h-28 w-28 items-center justify-center rounded-full" style={{ background: "rgba(34,197,94,0.18)" }}>
               <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2">
                 <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
+            <p className="text-sm font-bold uppercase tracking-widest text-success">Request received</p>
+            <p className="text-3xl font-bold text-navy">
+              {ackBy ? `${ackBy} is on the way` : "Your care team is on the way"}
+            </p>
+            <p className="text-lg text-slate/60">Someone is coming to assist you now.</p>
+            <button onClick={resetFlow}
+              className="mt-2 rounded-2xl bg-navy px-7 py-3 text-base font-semibold text-white hover:bg-[#0c2030]">
+              Done
+            </button>
+          </div>
+        ) : flow === "sent" ? (
+          <div className="flex flex-col items-center gap-5 text-center">
+            <div className="flex h-28 w-28 items-center justify-center rounded-full" style={{ background: "rgba(56,178,172,0.15)" }}>
+              <span className="h-12 w-12 animate-spin rounded-full border-4 border-teal/30 border-t-teal" />
+            </div>
             <p className="text-3xl font-bold text-navy">Help is on the way</p>
             <p className="text-lg text-slate/60">Your care team has been notified.</p>
+            <p className="text-sm text-slate/40">Waiting for staff to respond…</p>
+            <button onClick={resetFlow}
+              className="mt-2 rounded-2xl border border-slate/20 bg-white/60 px-7 py-3 text-base font-semibold text-slate hover:bg-white">
+              Done
+            </button>
           </div>
         ) : (
           <div className="flex flex-col items-center">

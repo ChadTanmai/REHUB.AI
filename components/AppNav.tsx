@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { RehubWordmark } from "@/components/RehubLogo";
 import UserMenu from "@/components/UserMenu";
 import FacilityCodeBadge from "@/components/FacilityCodeBadge";
+import GlobalCommandCenter from "@/components/GlobalCommandCenter";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 /**
@@ -70,6 +71,7 @@ export default function AppNav({
 
         <div className="ml-auto flex items-center gap-3">
           <FacilityCodeBadge />
+          {signedIn && <GlobalCommandCenter />}
           {signedIn ? (
             <UserMenu />
           ) : (

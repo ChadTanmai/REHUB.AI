@@ -50,6 +50,9 @@ interface OutboxItem {
 let flushing = false;
 let timer: ReturnType<typeof setInterval> | null = null;
 let listenersBound = false;
+// In-memory: localId → callback fired with the DB id once delivered. Not
+// persisted (a page reload drops the waiter, but the item still delivers).
+const deliveryCallbacks = new Map<string, (remoteId: string) => void>();
 
 function read(): OutboxItem[] {
   if (typeof window === "undefined") return [];
@@ -87,7 +90,10 @@ export function pendingCount(): number {
  * to send it. Returns a promise that resolves true if it was delivered on the
  * first attempt, false if it was queued for retry. Either way it is durable.
  */
-export async function enqueueRequest(payload: OutboxPayload): Promise<boolean> {
+export async function enqueueRequest(
+  payload: OutboxPayload,
+  onDelivered?: (remoteId: string) => void,
+): Promise<boolean> {
   const item: OutboxItem = {
     localId: newId(),
     payload,
@@ -95,6 +101,7 @@ export async function enqueueRequest(payload: OutboxPayload): Promise<boolean> {
     queuedAt: Date.now(),
     lastTryAt: 0,
   };
+  if (onDelivered) deliveryCallbacks.set(item.localId, onDelivered);
   const items = read();
   items.push(item);
   write(items);
@@ -123,14 +130,20 @@ export async function flushOutbox(): Promise<{ sent: number; pending: number }> 
       item.attempts += 1;
       item.lastTryAt = Date.now();
       let ok = false;
+      let remoteId: string | null = null;
       try {
         const res = await submitPatientRequest(item.payload);
+        remoteId = res.id;
         ok = res.id !== null;
       } catch {
         ok = false;
       }
       if (ok) {
         sent += 1;
+        if (remoteId) {
+          const cb = deliveryCallbacks.get(item.localId);
+          if (cb) { try { cb(remoteId); } catch { /* ignore */ } deliveryCallbacks.delete(item.localId); }
+        }
       } else {
         survivors.push(item);
       }
