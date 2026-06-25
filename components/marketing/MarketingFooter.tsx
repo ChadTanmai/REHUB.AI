@@ -22,6 +22,7 @@ const COLUMNS = [
   {
     title: "Resources",
     links: [
+      { href: "/ReHub-Executive-Proposal.pdf", label: "Executive proposal (PDF)", download: true },
       { href: "/for-facilities", label: "For facilities" },
       { href: "/about", label: "About" },
       { href: "/contact", label: "Contact sales" },
@@ -50,12 +51,22 @@ export default function MarketingFooter() {
               <ul className="mt-3 space-y-2">
                 {col.links.map((l) => (
                   <li key={l.href}>
-                    <Link
-                      href={l.href}
-                      className="text-sm text-slate/70 transition-colors hover:text-teal"
-                    >
-                      {l.label}
-                    </Link>
+                    {"download" in l && l.download ? (
+                      <a
+                        href={l.href}
+                        download
+                        className="text-sm text-slate/70 transition-colors hover:text-teal"
+                      >
+                        {l.label}
+                      </a>
+                    ) : (
+                      <Link
+                        href={l.href}
+                        className="text-sm text-slate/70 transition-colors hover:text-teal"
+                      >
+                        {l.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

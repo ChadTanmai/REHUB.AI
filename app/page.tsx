@@ -233,6 +233,14 @@ export default function Home() {
                   >
                     Self-serve setup
                   </Link>
+                  <a
+                    href="/ReHub-Executive-Proposal.pdf"
+                    download
+                    className="flex items-center justify-center gap-2 rounded-lg border border-teal/30 bg-teal/5 px-6 py-3.5 text-center text-base font-semibold text-teal transition-colors hover:bg-teal/10"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                    Download the proposal (PDF)
+                  </a>
                   <Link
                     href="/demo"
                     className="text-center text-sm font-medium text-teal hover:underline"
