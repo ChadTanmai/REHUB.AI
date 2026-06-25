@@ -14,12 +14,13 @@ import { useAuth } from "@/lib/auth/AuthProvider";
  * wayfinding for logged-in care team members.
  */
 
+// Consolidated, focused areas. Facility + Analytics live together under one
+// "Operations" workspace (/facility) so navigation isn't fragmented.
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home" },
   { href: "/command", label: "Command center" },
-  { href: "/rooms", label: "Rooms" },
-  { href: "/facility", label: "Facility" },
-  { href: "/admin", label: "Analytics" },
+  { href: "/rooms", label: "Patients" },
+  { href: "/facility", label: "Operations" },
 ];
 
 export default function AppNav({

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
+import HubiMount from "@/components/HubiMount";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -30,7 +31,10 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col bg-offwhite text-navy antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <HubiMount />
+        </AuthProvider>
       </body>
     </html>
   );

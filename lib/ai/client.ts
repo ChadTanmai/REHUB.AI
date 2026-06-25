@@ -147,6 +147,17 @@ export function aiAsk(
   return callAI<{ answer: string }>({ task: "ask", question, ...context }, { timeoutMs: 8000 });
 }
 
+/** Public + global Hubi assistant — controlled ReHub knowledge base, context-aware. */
+export function aiGuide(
+  question: string,
+  ctx: { pageContext?: string; signedIn?: boolean } = {},
+): Promise<{ answer: string } | null> {
+  return callAI<{ answer: string }>(
+    { task: "guide", question, pageContext: ctx.pageContext ?? "", signedIn: ctx.signedIn ?? false },
+    { timeoutMs: 9000 },
+  );
+}
+
 /** AI operational insights from pre-computed (free, Layer-1) stats. */
 export function aiAnalytics(
   facilityName: string,

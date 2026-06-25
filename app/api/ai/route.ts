@@ -249,6 +249,55 @@ async function runAsk(provider: Provider, body: Record<string, unknown>) {
   return { available: true, model: modelFor(provider), answer };
 }
 
+// ─── Guide (public + global Hubi assistant, controlled knowledge base) ─────
+// Powers the floating Hubi widget. Answers ONLY from the ReHub knowledge base
+// below + the caller's page context — no hallucinations, no off-topic drift.
+const REHUB_KB =
+  "REHUB KNOWLEDGE BASE (the only product facts you may state):\n" +
+  "- ReHub is an AI-powered communication platform for rehabilitation facilities, skilled nursing, " +
+  "senior living, and post-acute care. You, Hubi, are its AI care-coordination layer.\n" +
+  "- Patients: each room has a tablet. A patient taps a big button, speaks, or types a request. " +
+  "They confirm before it sends. No app install, no training needed. Accessible: large text, high " +
+  "contrast, voice input with typed fallback.\n" +
+  "- Patient join: staff share a short facility code / link; the room tablet pairs in seconds.\n" +
+  "- AI prioritization (how it works): a deterministic safety engine runs FIRST — hard rules flag " +
+  "critical safety phrases (e.g. 'I can't breathe') as Critical instantly, with no AI uncertainty. " +
+  "Then Hubi (AI) refines urgency, writes a summary, suggests an action, and can only RAISE urgency, " +
+  "never silently lower it. Layers: Rules → Priority → AI reasoning → Response.\n" +
+  "- Command center: the staff workspace. Every request shows AI summary, priority, confidence, " +
+  "suggested action, and a suggested reply. Critical requests auto-surface and beep. Staff " +
+  "acknowledge, assign, and resolve; every action is timestamped.\n" +
+  "- Smart routing: a patient can say 'tell Sarah…' and Hubi routes it to that staff member.\n" +
+  "- Voice: patients can talk to Hubi and hear spoken responses (speech-to-text + text-to-speech).\n" +
+  "- Hubi also powers natural-language search ('show critical requests') and analytics " +
+  "('which rooms had the most requests today?') and end-of-shift handoff summaries.\n" +
+  "- Operations: rooms, staff, invite links, and analytics (response times, request volume) live " +
+  "in the facility/operations area.\n" +
+  "- Setup: create a facility, pair room tablets and staff devices with a code — usually under 10 minutes.\n" +
+  "- Privacy: facility-scoped data, row-level security, immutable audit trail, a documented path to " +
+  "HIPAA-ready deployment. Devices never talk directly; everything routes through the ReHub backend.";
+
+async function runGuide(provider: Provider, body: Record<string, unknown>) {
+  const question = String(body.question ?? "").slice(0, 400);
+  const pageContext = String(body.pageContext ?? "").slice(0, 300);
+  const signedIn = Boolean(body.signedIn);
+  const answer = await complete(provider, {
+    system: hubiSystem(
+      `${REHUB_KB}\n\n` +
+      (signedIn
+        ? "You are the in-app Hubi assistant for a signed-in care-team member. "
+        : "You are greeting a website visitor who is exploring ReHub before signing in. ") +
+      (pageContext ? `The user is currently on: ${pageContext}. Tailor your answer to that context when relevant. ` : "") +
+      "Answer in 1-3 warm, clear, professional sentences using ONLY the knowledge base above. " +
+      "If asked something ReHub doesn't cover or that isn't in the knowledge base, briefly say it's " +
+      "outside what you can help with and steer back to how ReHub improves care communication. " +
+      "Never invent features, numbers, pricing, or clinical facts. Be concise and inviting."),
+    user: question || "Introduce yourself and tell me what ReHub does.",
+    maxTokens: 220,
+  });
+  return { available: true, model: modelFor(provider), answer };
+}
+
 // ─── Analytics (actionable operational insights) ───────────────────────────
 async function runAnalytics(provider: Provider, body: Record<string, unknown>) {
   const facility = String(body.facilityName ?? "the facility");
@@ -308,6 +357,7 @@ export async function POST(req: Request) {
       case "route":     return Response.json(await runRoute(provider, body));
       case "copilot":   return Response.json(await runCopilot(provider, body));
       case "ask":       return Response.json(await runAsk(provider, body));
+      case "guide":     return Response.json(await runGuide(provider, body));
       case "analytics": return Response.json(await runAnalytics(provider, body));
       case "search":    return Response.json(await runSearch(provider, body));
       default:          return Response.json({ available: true, error: "Unknown task" }, { status: 400 });

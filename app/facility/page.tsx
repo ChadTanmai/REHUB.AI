@@ -4,6 +4,7 @@ import { useState } from "react";
 import AppNav from "@/components/AppNav";
 import { SiteFooter } from "@/components/SiteNav";
 import RoomGrid from "@/components/RoomGrid";
+import AdminAnalytics from "@/components/AdminAnalytics";
 import { getTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import { getStore } from "@/lib/store";
@@ -152,6 +153,21 @@ export default function FacilityPage() {
             ) : (
               <div className="rounded-xl border border-dashed border-gray-muted bg-white p-8 text-center text-sm text-slate/60">
                 No care team members yet. Use the invite link above to connect a nurse or therapist.
+              </div>
+            )}
+          </section>
+
+          {/* Analytics — consolidated here so Operations is one focused workspace */}
+          <section id="analytics" className="mt-8 scroll-mt-20">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-navy">Analytics</h2>
+              <p className="text-xs text-slate/50">Ask Hubi for natural-language insights →</p>
+            </div>
+            {ws.requests.length ? (
+              <AdminAnalytics requests={ws.requests} />
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-muted bg-white p-8 text-center text-sm text-slate/60">
+                Analytics appear here once patients start sending requests.
               </div>
             )}
           </section>

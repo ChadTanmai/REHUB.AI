@@ -75,25 +75,12 @@ export default function DashboardPage() {
   useStoreVersion();
   const router = useRouter();
   const { profile, signedIn, loading } = useAuth();
-  const [showIntro, setShowIntro] = useState(false);
 
   useEffect(() => {
     if (!loading && !signedIn) {
       router.replace("/auth/signin?next=/dashboard");
     }
   }, [loading, signedIn, router]);
-
-  useEffect(() => {
-    const seen = sessionStorage.getItem("rehub:intro-seen");
-    if (!seen) {
-      setShowIntro(true);
-      const t = setTimeout(() => {
-        sessionStorage.setItem("rehub:intro-seen", "1");
-        setShowIntro(false);
-      }, 1800);
-      return () => clearTimeout(t);
-    }
-  }, []);
 
   if (!mounted || loading) {
     return (
@@ -124,29 +111,6 @@ export default function DashboardPage() {
 
   return (
     <>
-      <AnimatePresence>
-        {showIntro && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-white"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.4, ease: EASE, delay: 0.1 }}
-              className="text-center"
-            >
-              <p className="text-3xl font-bold text-navy">Rehub</p>
-              <p className="mt-1 text-sm text-slate/60">Loading your facility…</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <AppNav facilityName={ws?.facility.name ?? profile?.facilityName} userName={profile?.displayName} />
 
       <main className="flex-1 bg-offwhite">
@@ -292,21 +256,21 @@ export default function DashboardPage() {
               <div className="grid gap-4 sm:grid-cols-3">
                 <NavCard
                   icon={<HeartPulseIcon />}
-                  label="Care queue"
+                  label="Command center"
                   desc="Live request queue and staff workflow"
                   href="/command"
                   primary
                 />
                 <NavCard
-                  icon={<ChartIcon />}
-                  label="Analytics"
-                  desc="Response times and request volume"
-                  href="/admin"
+                  icon={<UsersIcon />}
+                  label="Patients"
+                  desc="Rooms and patient activity"
+                  href="/rooms"
                 />
                 <NavCard
                   icon={<BuildingIcon />}
-                  label="Facility"
-                  desc="Rooms, staff, and invite links"
+                  label="Operations"
+                  desc="Facility, staff, invites, and analytics"
                   href="/facility"
                 />
               </div>
@@ -336,7 +300,7 @@ export default function DashboardPage() {
                 <div className="flex flex-wrap gap-2">
                   <QuickAction icon={<PlusIcon />} label="Add room" href="/rooms" />
                   <QuickAction icon={<UsersIcon />} label="Add staff" href="/facility" />
-                  <QuickAction icon={<ChartIcon />} label="View analytics" href="/admin" />
+                  <QuickAction icon={<ChartIcon />} label="View analytics" href="/facility#analytics" />
                   <QuickAction icon={<BuildingIcon />} label="Facility settings" href="/facility" />
                 </div>
               </div>
