@@ -6,6 +6,8 @@ import { getPatientSession, clearPatientSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
 import { enqueueRequest, ensureAutoFlush } from "@/lib/supabase/outbox";
 import { getRequestStatus } from "@/lib/supabase/requests";
+import { openLiveBroadcaster } from "@/lib/supabase/liveChannel";
+import { classifyRequest } from "@/lib/aiClassifier";
 import { primeTTS, speak } from "@/lib/tts";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
@@ -29,12 +31,16 @@ export default function PatientPage() {
   const [showTyping, setShowTyping] = useState(false);
   const [typedDraft, setTypedDraft] = useState("");
   const [sttError, setSttError] = useState("");
+  // Pulses true briefly each time new speech arrives → drives the live animation.
+  const [voiceActive, setVoiceActive] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recRef = useRef<any>(null);
   const transcriptRef = useRef("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
+  const liveRef = useRef<{ send: (p: import("@/lib/supabase/liveChannel").LiveSpeakingPayload) => void; close: () => void } | null>(null);
+  const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep delivering any queued patient requests in the background (retry on
   // reconnect / focus). The timer is a module singleton, so no cleanup needed.
@@ -65,6 +71,38 @@ export default function PatientPage() {
   function stopEverything() {
     if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
     stopPolling();
+    closeLive(false);
+    if (voiceTimerRef.current) { clearTimeout(voiceTimerRef.current); voiceTimerRef.current = null; }
+  }
+
+  // Brief "voice active" pulse (drives the live animation without a 2nd mic).
+  function pulseVoice() {
+    setVoiceActive(true);
+    if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
+    voiceTimerRef.current = setTimeout(() => setVoiceActive(false), 350);
+  }
+
+  // Push a live partial transcript to the nurse via Broadcast (best-effort).
+  function broadcastLive(text: string, speaking: boolean) {
+    if (!liveRef.current) return;
+    const urgency = text.trim() ? classifyRequest(text).urgencyLevel ?? null : null;
+    liveRef.current.send({
+      roomId,
+      roomNumber: session!.roomNumber,
+      residentName: session!.patientName,
+      transcript: text,
+      speaking,
+      urgencyLevel: urgency,
+      ts: Date.now(),
+    });
+  }
+
+  // Tell the nurse the patient stopped speaking, then tear down the channel.
+  function closeLive(sendStop: boolean) {
+    if (!liveRef.current) return;
+    if (sendStop) broadcastLive(transcriptRef.current, false);
+    liveRef.current.close();
+    liveRef.current = null;
   }
 
   /**
@@ -122,6 +160,10 @@ export default function PatientPage() {
     setRecording(true);
     setShowTyping(false);
 
+    // Open the live broadcast channel so the nurse sees words as they're spoken.
+    liveRef.current = openLiveBroadcaster(facilityId);
+    broadcastLive("", true);
+
     // IMPORTANT: do NOT open a second microphone stream (getUserMedia) here.
     // On phones a second mic capture steals audio from SpeechRecognition and
     // you get an empty transcript. SpeechRecognition owns the mic alone.
@@ -137,6 +179,9 @@ export default function PatientPage() {
         .join(" ");
       transcriptRef.current = t;
       setTranscript(t);
+      pulseVoice();
+      // Stream the partial transcript to the nurse immediately (no DB write).
+      broadcastLive(t, true);
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onerror = (e: any) => {
@@ -157,6 +202,8 @@ export default function PatientPage() {
 
   function stopListening() {
     if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
+    closeLive(true);
+    setVoiceActive(false);
     setRecording(false);
     setShowTyping(false);
     const finalText = transcriptRef.current.trim();
@@ -166,6 +213,8 @@ export default function PatientPage() {
   function sendTyped() {
     const text = typedDraft.trim();
     if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
+    closeLive(true);
+    setVoiceActive(false);
     setRecording(false);
     setShowTyping(false);
     setTypedDraft("");
@@ -331,14 +380,15 @@ export default function PatientPage() {
                 className={`absolute rounded-full border-2 ${recording ? "animate-[ping_1.6s_ease-in-out_infinite]" : "animate-[pulse_2.6s_ease-in-out_infinite]"}`}
                 style={{ width: 260, height: 260, borderColor: "rgba(56,178,172,0.35)" }}
               />
-              {/* Core */}
+              {/* Core — scales up briefly as words arrive (voice-reactive) */}
               <span
-                className={`relative flex items-center justify-center rounded-full text-white shadow-[0_12px_40px_rgba(56,178,172,0.45)] ${recording ? "animate-[pulse_1.4s_ease-in-out_infinite]" : ""}`}
+                className="relative flex items-center justify-center rounded-full text-white shadow-[0_12px_40px_rgba(56,178,172,0.45)] transition-transform duration-200 ease-out"
                 style={{
                   width: 220, height: 220,
                   background: recording
                     ? "radial-gradient(circle at 50% 40%, #4fd1c5, #319795)"
                     : "radial-gradient(circle at 50% 40%, #3fc0b8, #2c9c97)",
+                  transform: `scale(${voiceActive ? 1.08 : recording ? 1.02 : 1})`,
                 }}
               >
                 <span className="text-2xl font-bold tracking-tight">

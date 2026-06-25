@@ -23,6 +23,7 @@ import {
   subscribeFacilityRequests,
   updateRequestStatus,
 } from "@/lib/supabase/requests";
+import { subscribeLiveSpeaking, type LiveSpeakingPayload } from "@/lib/supabase/liveChannel";
 
 function urgencyOf(r: Request): UrgencyLevel {
   return r.urgencyLevel ?? (r.priority === "Urgent" ? "High" : r.priority === "Important" ? "Medium" : "Low");
@@ -60,7 +61,9 @@ export default function GlobalCommandCenter() {
   useStoreVersion();
 
   const [open, setOpen] = useState(false);
+  const [liveSpeakers, setLiveSpeakers] = useState<Record<string, LiveSpeakingPayload>>({});
   const seenCritical = useRef<Set<string>>(new Set());
+  const liveBeeped = useRef<Set<string>>(new Set());
 
   const store = getStore();
   const session = mounted ? getTherapistSession() : null;
@@ -92,7 +95,42 @@ export default function GlobalCommandCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 
+  // Live speech: partial transcripts streamed via Broadcast as patients speak.
+  useEffect(() => {
+    if (!facilityId) return;
+    const unsub = subscribeLiveSpeaking(facilityId, (p) => {
+      setLiveSpeakers((prev) => {
+        const next = { ...prev };
+        if (!p.speaking) delete next[p.roomId];
+        else next[p.roomId] = p;
+        return next;
+      });
+      // Early Critical detection — alert before the patient even finishes.
+      if (p.speaking && p.urgencyLevel === "Critical" && !liveBeeped.current.has(p.roomId)) {
+        liveBeeped.current.add(p.roomId);
+        beep();
+        setTimeout(() => liveBeeped.current.delete(p.roomId), 12000);
+      }
+    });
+    // Prune speakers that stopped sending (closed tab / lost network).
+    const prune = setInterval(() => {
+      setLiveSpeakers((prev) => {
+        const now = Date.now();
+        let changed = false;
+        const next: Record<string, LiveSpeakingPayload> = {};
+        for (const [k, v] of Object.entries(prev)) {
+          if (now - v.ts < 6000) next[k] = v; else changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }, 2000);
+    return () => { unsub(); clearInterval(prune); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facilityId]);
+
   if (!mounted || !signedIn || !facilityId) return null;
+
+  const speakers = Object.values(liveSpeakers).sort((a, b) => b.ts - a.ts);
 
   const ws = store.getWorkspace(facilityId);
   const active = ws.requests.filter(isActive);
@@ -127,6 +165,12 @@ export default function GlobalCommandCenter() {
             {active.length}
           </span>
         )}
+        {speakers.length > 0 && (
+          <span className="absolute -bottom-0.5 -left-0.5 flex h-3 w-3">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-success" />
+          </span>
+        )}
       </button>
 
       {/* Slide-out panel */}
@@ -151,7 +195,35 @@ export default function GlobalCommandCenter() {
             </div>
 
             <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
-              {queue.length === 0 && (
+              {/* Live: patients speaking right now (Broadcast, no DB write) */}
+              {speakers.map((s) => {
+                const critical = s.urgencyLevel === "Critical";
+                return (
+                  <div key={`live-${s.roomId}`}
+                    className="rounded-xl border-2 bg-white p-3 shadow-soft"
+                    style={{ borderColor: critical ? "#dc2626" : "#16a34a" }}>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-2.5 w-2.5">
+                        <span className="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full opacity-75"
+                          style={{ background: critical ? "#dc2626" : "#16a34a" }} />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full"
+                          style={{ background: critical ? "#dc2626" : "#16a34a" }} />
+                      </span>
+                      <span className="text-xs font-bold uppercase tracking-wide"
+                        style={{ color: critical ? "#dc2626" : "#16a34a" }}>
+                        {critical ? "Critical · speaking now" : "Speaking now"}
+                      </span>
+                      <span className="ml-auto text-sm font-bold text-navy">Room {s.roomNumber}</span>
+                    </div>
+                    <p className="mt-1.5 text-sm font-medium text-navy">{s.residentName}</p>
+                    <p className="min-h-5 text-sm text-slate">
+                      {s.transcript ? <>&ldquo;{s.transcript}&rdquo;</> : <span className="text-slate/40">listening…</span>}
+                    </p>
+                  </div>
+                );
+              })}
+
+              {queue.length === 0 && speakers.length === 0 && (
                 <p className="px-2 py-10 text-center text-sm text-slate/40">All clear. No active requests.</p>
               )}
               {queue.map((req) => {
