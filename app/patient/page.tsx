@@ -8,15 +8,26 @@ import { enqueueRequest, ensureAutoFlush } from "@/lib/supabase/outbox";
 import { getRequestStatus } from "@/lib/supabase/requests";
 import { openLiveBroadcaster } from "@/lib/supabase/liveChannel";
 import { classifyRequest } from "@/lib/aiClassifier";
-import { aiConverse, aiRoute, aiAsk } from "@/lib/ai/client";
+import { aiConverse, aiRoute, aiAsk, aiTriage } from "@/lib/ai/client";
 import { buildPatientMemory } from "@/lib/ai/memory";
 import { primeTTS, speak } from "@/lib/tts";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
+import type { UrgencyLevel } from "@/lib/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SR = any;
 
 type AppView = "home" | "settings";
+
+// Severity ranking so the live stream always surfaces the safer of two reads.
+const URGENCY_RANK: Record<UrgencyLevel, number> = {
+  Critical: 5, High: 4, Medium: 3, Low: 2, Informational: 1,
+};
+function mostSevere(a: UrgencyLevel | null, b: UrgencyLevel | null): UrgencyLevel | null {
+  if (!a) return b;
+  if (!b) return a;
+  return URGENCY_RANK[a] >= URGENCY_RANK[b] ? a : b;
+}
 
 export default function PatientPage() {
   const mounted = useMounted();
@@ -53,6 +64,10 @@ export default function PatientPage() {
   const pollStartRef = useRef<number>(0);
   const liveRef = useRef<{ send: (p: import("@/lib/supabase/liveChannel").LiveSpeakingPayload) => void; close: () => void } | null>(null);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Live AI analysis: debounced Hubi triage on the partial transcript mid-speech.
+  const liveAiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveAiLastText = useRef("");
+  const liveAiUrgency = useRef<UrgencyLevel | null>(null);
 
   useEffect(() => { ensureAutoFlush(); }, []);
   useEffect(() => { return () => stopEverything(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
@@ -79,6 +94,7 @@ export default function PatientPage() {
     stopPolling();
     closeLive(false);
     if (voiceTimerRef.current) { clearTimeout(voiceTimerRef.current); voiceTimerRef.current = null; }
+    if (liveAiTimerRef.current) { clearTimeout(liveAiTimerRef.current); liveAiTimerRef.current = null; }
   }
 
   function pulseVoice() {
@@ -89,7 +105,10 @@ export default function PatientPage() {
 
   function broadcastLive(text: string, speaking: boolean) {
     if (!liveRef.current) return;
-    const urgency = text.trim() ? classifyRequest(text).urgencyLevel ?? null : null;
+    // Merge the instant deterministic read with Hubi's live AI read (whichever
+    // is more severe wins) so the nurse always sees the safest urgency.
+    const deterministic = text.trim() ? classifyRequest(text).urgencyLevel ?? null : null;
+    const urgency = mostSevere(deterministic, liveAiUrgency.current);
     liveRef.current.send({
       roomId,
       roomNumber: session!.roomNumber,
@@ -99,6 +118,27 @@ export default function PatientPage() {
       urgencyLevel: urgency,
       ts: Date.now(),
     });
+  }
+
+  /**
+   * Live AI analysis — debounced Hubi triage on the partial transcript.
+   * Runs ~1.1s after the patient pauses mid-sentence (not on every word), so
+   * the nurse sees an AI-refined urgency in real time while keeping credits low.
+   */
+  function scheduleLiveAnalysis(text: string) {
+    const t = text.trim();
+    if (liveAiTimerRef.current) clearTimeout(liveAiTimerRef.current);
+    if (t.length < 10) return; // too little signal to spend a call on
+    liveAiTimerRef.current = setTimeout(async () => {
+      if (t === liveAiLastText.current) return; // already analyzed this text
+      liveAiLastText.current = t;
+      const preset = classifyRequest(t).urgencyLevel ?? "Low";
+      const ai = await aiTriage(t, preset);
+      // Bail if recording ended or nothing came back; never downgrade silently.
+      if (!ai || !recRef.current || !liveRef.current) return;
+      liveAiUrgency.current = ai.urgencyLevel;
+      broadcastLive(transcriptRef.current, true); // push refined urgency mid-speech
+    }, 1100);
   }
 
   function closeLive(sendStop: boolean) {
@@ -169,6 +209,10 @@ export default function PatientPage() {
     setRecording(true);
     setShowTyping(false);
 
+    // Fresh utterance: clear any prior live AI read.
+    liveAiUrgency.current = null;
+    liveAiLastText.current = "";
+
     // Only open live broadcast for staff requests, not for ask-mode questions
     if (!askModeRef.current) {
       liveRef.current = openLiveBroadcaster(facilityId);
@@ -188,7 +232,10 @@ export default function PatientPage() {
       transcriptRef.current = t;
       setTranscript(t);
       pulseVoice();
-      if (!askModeRef.current) broadcastLive(t, true);
+      if (!askModeRef.current) {
+        broadcastLive(t, true);
+        scheduleLiveAnalysis(t); // Hubi refines urgency mid-sentence (debounced)
+      }
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onerror = (e: any) => {
