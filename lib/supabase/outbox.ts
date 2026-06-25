@@ -22,8 +22,8 @@
 import { submitPatientRequest } from "./requests";
 
 const KEY = "rehub:outbox:requests";
-const MAX_ATTEMPTS = 100;          // keep trying for a long time (hours)
-const FLUSH_INTERVAL_MS = 15_000;  // background retry cadence
+const MAX_ATTEMPTS = 500;         // keep trying for a long time
+const FLUSH_INTERVAL_MS = 3_000;  // fast retry — emergency requests can't wait
 
 export interface OutboxPayload {
   facilityCode: string;

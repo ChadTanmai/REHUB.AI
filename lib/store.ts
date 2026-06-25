@@ -85,6 +85,25 @@ function uid(prefix: string): string {
 
 type Listener = () => void;
 
+/** Shape of a request arriving from Supabase (realtime or catch-up fetch). */
+export interface RemoteRequestInput {
+  id: string;
+  roomId: string | null;
+  roomNumber: string | null;
+  residentName: string | null;
+  text: string | null;
+  source: string | null;
+  requestType: string | null;
+  priority: string | null;
+  urgencyLevel: import("./types").UrgencyLevel | null;
+  triageReason: string | null;
+  suggestedAction: string | null;
+  status: string;
+  createdAt: string;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+}
+
 class RehubStore {
   private workspaces = new Map<string, FacilityWorkspace>();
   private listeners = new Set<Listener>();
@@ -798,28 +817,10 @@ class RehubStore {
   }
 
   /**
-   * Merge a request that arrived from Supabase Realtime (a patient on another
-   * device) into the local workspace. Upserts by id and emits so the command
-   * center updates live.
+   * Merge a request into a workspace WITHOUT persisting/emitting. Returns true
+   * if it created a new request or meaningfully changed an existing one.
    */
-  ingestRemoteRequest(facilityId: string, r: {
-    id: string;
-    roomId: string | null;
-    roomNumber: string | null;
-    residentName: string | null;
-    text: string | null;
-    source: string | null;
-    requestType: string | null;
-    priority: string | null;
-    urgencyLevel: import("./types").UrgencyLevel | null;
-    triageReason: string | null;
-    suggestedAction: string | null;
-    status: string;
-    createdAt: string;
-    acknowledgedAt: string | null;
-    resolvedAt: string | null;
-  }): void {
-    const ws = this.ensureFacility(facilityId);
+  private applyRemoteRequest(ws: FacilityWorkspace, facilityId: string, r: RemoteRequestInput): boolean {
     const existing = ws.requests.find((x) => x.id === r.id);
     const priority = (["Routine", "Important", "Urgent"].includes(r.priority ?? "")
       ? r.priority : "Routine") as Request["priority"];
@@ -849,13 +850,46 @@ class RehubStore {
       acknowledgedAt: r.acknowledgedAt ?? existing?.acknowledgedAt,
       resolvedAt: r.resolvedAt ?? existing?.resolvedAt,
     };
-    if (existing) {
-      Object.assign(existing, merged);
-    } else {
+    if (!existing) {
       ws.requests.push(merged);
+      return true;
     }
+    const changed =
+      existing.status !== merged.status ||
+      existing.acknowledgedAt !== merged.acknowledgedAt ||
+      existing.resolvedAt !== merged.resolvedAt ||
+      existing.transcript !== merged.transcript;
+    Object.assign(existing, merged);
+    return changed;
+  }
+
+  /**
+   * Merge a single request that arrived from Supabase Realtime (a patient on
+   * another device / in another building) into the local workspace.
+   */
+  ingestRemoteRequest(facilityId: string, r: RemoteRequestInput): void {
+    const ws = this.ensureFacility(facilityId);
+    this.applyRemoteRequest(ws, facilityId, r);
     this.persist(facilityId, false);
     this.emit();
+  }
+
+  /**
+   * Batch-merge many requests (catch-up poll safety net). Persists once and
+   * only emits when something actually changed, so a steady poll is cheap.
+   */
+  ingestRemoteRequests(facilityId: string, rows: RemoteRequestInput[]): boolean {
+    if (rows.length === 0) return false;
+    const ws = this.ensureFacility(facilityId);
+    let changed = false;
+    for (const r of rows) {
+      if (this.applyRemoteRequest(ws, facilityId, r)) changed = true;
+    }
+    if (changed) {
+      this.persist(facilityId, false);
+      this.emit();
+    }
+    return changed;
   }
 
   /** Claim a request without changing status ("Assign to Me"). */

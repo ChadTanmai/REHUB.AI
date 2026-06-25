@@ -78,12 +78,28 @@ export default function GlobalCommandCenter() {
   useEffect(() => {
     if (!facilityId) return;
     let active = true;
-    fetchFacilityRequestsDiag(facilityId).then(({ rows }) => {
-      if (!active) return;
-      rows.forEach((r) => store.ingestRemoteRequest(facilityId, r));
-      // Seed the seen-set so we don't beep for the backlog on first load.
-      rows.forEach((r) => { if (r.urgencyLevel === "Critical") seenCritical.current.add(r.id); });
-    });
+    let firstLoad = true;
+
+    // Ingest a fetched batch. On the very first load we seed the seen-set so we
+    // don't beep the backlog; afterwards (catch-up poll) we DO beep any newly
+    // arrived active Critical we somehow missed over realtime.
+    const ingest = (rows: Parameters<typeof store.ingestRemoteRequests>[1]) => {
+      store.ingestRemoteRequests(facilityId, rows);
+      for (const r of rows) {
+        if (r.urgencyLevel !== "Critical") continue;
+        const stillActive = r.status === "New" || r.status === "Acknowledged" || r.status === "In Progress";
+        if (firstLoad) { seenCritical.current.add(r.id); continue; }
+        if (stillActive && !seenCritical.current.has(r.id)) {
+          seenCritical.current.add(r.id);
+          beep();
+        }
+      }
+      firstLoad = false;
+    };
+
+    fetchFacilityRequestsDiag(facilityId).then(({ rows }) => { if (active) ingest(rows); });
+
+    // Primary path: realtime push (sub-second, works across buildings).
     const unsub = subscribeFacilityRequests(facilityId, (r) => {
       store.ingestRemoteRequest(facilityId, r);
       if (r.urgencyLevel === "Critical" && !seenCritical.current.has(r.id)) {
@@ -91,7 +107,14 @@ export default function GlobalCommandCenter() {
         beep();
       }
     }, "global");
-    return () => { active = false; unsub(); };
+
+    // Safety net: catch-up poll so a missed/dropped realtime event still
+    // surfaces within a few seconds — nothing is ever "late" by more than this.
+    const poll = setInterval(() => {
+      fetchFacilityRequestsDiag(facilityId).then(({ rows }) => { if (active) ingest(rows); });
+    }, 7000);
+
+    return () => { active = false; unsub(); clearInterval(poll); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 
