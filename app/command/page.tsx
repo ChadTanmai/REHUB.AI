@@ -14,6 +14,7 @@ import {
   updateRequestStatus,
 } from "@/lib/supabase/requests";
 import { aiHandoff } from "@/lib/ai/client";
+import HubiConsole from "@/components/HubiConsole";
 
 function urgencyOf(r: Request): UrgencyLevel {
   return r.urgencyLevel ?? (r.priority === "Urgent" ? "High" : r.priority === "Important" ? "Medium" : "Low");
@@ -50,6 +51,7 @@ export default function CommandCenterPage() {
   const [report, setReport] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportUnavailable, setReportUnavailable] = useState(false);
+  const [hubiOpen, setHubiOpen] = useState(false);
 
   const store = getStore();
   const session = mounted ? getTherapistSession() : null;
@@ -146,6 +148,14 @@ export default function CommandCenterPage() {
     <>
       <AppNav facilityName={ws.facility.name} />
 
+      <HubiConsole
+        open={hubiOpen}
+        onClose={() => setHubiOpen(false)}
+        facilityName={ws.facility.name}
+        requests={ws.requests}
+        onSelectRoom={(roomId) => setSelectedRoom(roomId)}
+      />
+
       {(report || reportLoading || reportUnavailable) && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-navy/40 p-4" onClick={() => { setReport(null); setReportUnavailable(false); }}>
           <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -182,7 +192,12 @@ export default function CommandCenterPage() {
           <div className="border-b border-gray-muted px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate/50">Rooms</p>
           </div>
-          <div className="border-b border-gray-muted p-3">
+          <div className="space-y-2 border-b border-gray-muted p-3">
+            <button onClick={() => setHubiOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#1d4ed8]/25 bg-[#1d4ed8]/8 px-3 py-2 text-xs font-bold text-[#1d4ed8] transition-colors hover:bg-[#1d4ed8]/15">
+              <span className="flex h-4 w-4 items-center justify-center rounded bg-[#1d4ed8] text-[9px] font-black text-white">H</span>
+              Ask Hubi · search · insights
+            </button>
             <button onClick={generateReport} disabled={reportLoading}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#123a5c] to-[#1d4ed8] px-3 py-2 text-xs font-semibold text-white shadow-soft transition-transform hover:scale-[1.02] disabled:opacity-50">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13h6M9 17h6" strokeLinecap="round"/></svg>

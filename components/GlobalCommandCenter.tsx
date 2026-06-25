@@ -31,7 +31,8 @@ import {
   updateRequestTriage,
 } from "@/lib/supabase/requests";
 import { subscribeLiveSpeaking, type LiveSpeakingPayload } from "@/lib/supabase/liveChannel";
-import { aiTriage } from "@/lib/ai/client";
+import { aiTriage, aiCopilot } from "@/lib/ai/client";
+import { buildPatientMemory } from "@/lib/ai/memory";
 
 const URGENCY_ORDER: UrgencyLevel[] = ["Critical", "High", "Medium", "Low", "Informational"];
 
@@ -115,7 +116,9 @@ export default function GlobalCommandCenter() {
     const text = (req.transcript ?? req.aiSummary ?? "").trim();
     if (!text) return;
     const current = urgencyOf(req);
-    const ai = await aiTriage(text, current);
+    // Patient memory: feed recent history so triage understands ongoing situations.
+    const memory = buildPatientMemory(store, facilityId, { roomId: req.roomId, excludeRequestId: reqId });
+    const ai = await aiTriage(text, current, memory.context);
     if (!ai) return;
     const raised = URGENCY_META[ai.urgencyLevel].rank > URGENCY_META[current].rank;
     const finalUrgency = raised ? ai.urgencyLevel : current;
@@ -495,19 +498,13 @@ function RequestCard({ req, onAck, onResolve, spring }: {
     setCopilotLoading(true);
     setCopilotOpen(true);
     try {
-      const res = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          task: "copilot",
-          residentName: req.residentName,
-          summary: req.aiSummary || req.transcript || req.requestType,
-          urgency: u,
-          requestType: req.requestType,
-        }),
+      const res = await aiCopilot({
+        residentName: req.residentName,
+        summary: req.aiSummary || req.transcript || req.requestType,
+        urgency: u,
+        requestType: req.requestType,
       });
-      const data = await res.json();
-      if (data?.response) setCopilot(data.response);
+      if (res?.response) setCopilot(res.response);
     } catch { /* ignore */ }
     finally { setCopilotLoading(false); }
   }

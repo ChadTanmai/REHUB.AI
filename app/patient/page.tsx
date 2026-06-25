@@ -9,6 +9,7 @@ import { getRequestStatus } from "@/lib/supabase/requests";
 import { openLiveBroadcaster } from "@/lib/supabase/liveChannel";
 import { classifyRequest } from "@/lib/aiClassifier";
 import { aiConverse, aiRoute, aiAsk } from "@/lib/ai/client";
+import { buildPatientMemory } from "@/lib/ai/memory";
 import { primeTTS, speak } from "@/lib/tts";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
@@ -310,11 +311,13 @@ export default function PatientPage() {
     setAskLoading(true);
     setAskAnswer(null);
     const therapists = ws.therapists.map((t) => `${t.name} (${t.role})`).join(", ");
+    const memory = buildPatientMemory(store, facilityId, { roomId });
     const result = await aiAsk(question, {
       patientName: session!.patientName,
       roomNumber: session!.roomNumber,
       facilityName: session!.facilityName,
       staffContext: therapists ? `Staff on duty: ${therapists}.` : "",
+      patientContext: memory.context,
     });
     setAskLoading(false);
     if (result?.answer) {
