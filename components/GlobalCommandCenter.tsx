@@ -1,17 +1,23 @@
 "use client";
 
 /**
- * Global command center — a top-right bell + right-side slide-out panel that is
- * available on every staff page (mounted in AppNav). Shows live patient request
- * counts (critical / total), opens to a priority-sorted queue, and lets a nurse
- * acknowledge or resolve from anywhere without navigating to /command.
+ * Global command center — the operational heart of the facility.
  *
- * It owns the single realtime subscription for the signed-in facility so the
- * store stays fresh app-wide; the full /command page reads the same store.
+ * A top-right bell (live critical/active counts + a "speaking now" pulse) opens
+ * a physics-based slide-out panel rendered via a PORTAL to document.body. The
+ * portal is essential: AppNav has `backdrop-blur`, which makes it the containing
+ * block for any position:fixed child — so a panel rendered inline would be
+ * clipped to the header. Portaling to <body> lets it cover the full viewport.
+ *
+ * It owns the single realtime subscription for the signed-in facility (so the
+ * store stays fresh app-wide), surfaces a floating toast on each new request,
+ * and auto-opens on a Critical.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import { getStore } from "@/lib/store";
 import { getTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
@@ -24,6 +30,8 @@ import {
   updateRequestStatus,
 } from "@/lib/supabase/requests";
 import { subscribeLiveSpeaking, type LiveSpeakingPayload } from "@/lib/supabase/liveChannel";
+
+const URGENCY_ORDER: UrgencyLevel[] = ["Critical", "High", "Medium", "Low", "Informational"];
 
 function urgencyOf(r: Request): UrgencyLevel {
   return r.urgencyLevel ?? (r.priority === "Urgent" ? "High" : r.priority === "Important" ? "Medium" : "Low");
@@ -55,6 +63,8 @@ function beep() {
   } catch { /* ignore */ }
 }
 
+interface Toast { id: string; roomNumber: string; residentName: string; urgency: UrgencyLevel; preview: string }
+
 export default function GlobalCommandCenter() {
   const mounted = useMounted();
   const { profile, signedIn } = useAuth();
@@ -62,8 +72,11 @@ export default function GlobalCommandCenter() {
 
   const [open, setOpen] = useState(false);
   const [liveSpeakers, setLiveSpeakers] = useState<Record<string, LiveSpeakingPayload>>({});
+  const [toast, setToast] = useState<Toast | null>(null);
   const seenCritical = useRef<Set<string>>(new Set());
+  const seenIds = useRef<Set<string>>(new Set());
   const liveBeeped = useRef<Set<string>>(new Set());
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const store = getStore();
   const session = mounted ? getTherapistSession() : null;
@@ -75,75 +88,80 @@ export default function GlobalCommandCenter() {
         ? profile!.facilityId!
         : mounted ? store.listFacilities()[0]?.id ?? null : null;
 
+  function showToast(r: Request) {
+    const t: Toast = {
+      id: r.id,
+      roomNumber: r.roomNumber,
+      residentName: r.residentName,
+      urgency: urgencyOf(r),
+      preview: r.transcript || r.aiSummary || `${r.requestType} request`,
+    };
+    setToast(t);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 5500);
+  }
+
   useEffect(() => {
     if (!facilityId) return;
-    let active = true;
+    let activeFlag = true;
     let firstLoad = true;
 
-    // Ingest a fetched batch. On the very first load we seed the seen-set so we
-    // don't beep the backlog; afterwards (catch-up poll) we DO beep any newly
-    // arrived active Critical we somehow missed over realtime.
     const ingest = (rows: Parameters<typeof store.ingestRemoteRequests>[1]) => {
       store.ingestRemoteRequests(facilityId, rows);
       for (const r of rows) {
-        if (r.urgencyLevel !== "Critical") continue;
+        if (firstLoad) { seenIds.current.add(r.id); if (r.urgencyLevel === "Critical") seenCritical.current.add(r.id); continue; }
         const stillActive = r.status === "New" || r.status === "Acknowledged" || r.status === "In Progress";
-        if (firstLoad) { seenCritical.current.add(r.id); continue; }
-        if (stillActive && !seenCritical.current.has(r.id)) {
-          seenCritical.current.add(r.id);
-          beep();
+        if (r.urgencyLevel === "Critical" && stillActive && !seenCritical.current.has(r.id)) {
+          seenCritical.current.add(r.id); beep();
         }
       }
       firstLoad = false;
     };
 
-    fetchFacilityRequestsDiag(facilityId).then(({ rows }) => { if (active) ingest(rows); });
+    fetchFacilityRequestsDiag(facilityId).then(({ rows }) => { if (activeFlag) ingest(rows); });
 
-    // Primary path: realtime push (sub-second, works across buildings).
     const unsub = subscribeFacilityRequests(facilityId, (r) => {
       store.ingestRemoteRequest(facilityId, r);
+      const isNew = !seenIds.current.has(r.id);
+      seenIds.current.add(r.id);
+      const stillActive = r.status === "New" || r.status === "Acknowledged" || r.status === "In Progress";
+      if (isNew && stillActive) {
+        const req = store.getWorkspace(facilityId).requests.find((x) => x.id === r.id);
+        if (req) showToast(req);
+        if (r.urgencyLevel === "Critical") setOpen(true); // auto-open on Critical
+      }
       if (r.urgencyLevel === "Critical" && !seenCritical.current.has(r.id)) {
-        seenCritical.current.add(r.id);
-        beep();
+        seenCritical.current.add(r.id); beep();
       }
     }, "global");
 
-    // Safety net: catch-up poll so a missed/dropped realtime event still
-    // surfaces within a few seconds — nothing is ever "late" by more than this.
     const poll = setInterval(() => {
-      fetchFacilityRequestsDiag(facilityId).then(({ rows }) => { if (active) ingest(rows); });
+      fetchFacilityRequestsDiag(facilityId).then(({ rows }) => { if (activeFlag) ingest(rows); });
     }, 7000);
 
-    return () => { active = false; unsub(); clearInterval(poll); };
+    return () => { activeFlag = false; unsub(); clearInterval(poll); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 
-  // Live speech: partial transcripts streamed via Broadcast as patients speak.
+  // Live speech via Broadcast.
   useEffect(() => {
     if (!facilityId) return;
     const unsub = subscribeLiveSpeaking(facilityId, (p) => {
       setLiveSpeakers((prev) => {
         const next = { ...prev };
-        if (!p.speaking) delete next[p.roomId];
-        else next[p.roomId] = p;
+        if (!p.speaking) delete next[p.roomId]; else next[p.roomId] = p;
         return next;
       });
-      // Early Critical detection — alert before the patient even finishes.
       if (p.speaking && p.urgencyLevel === "Critical" && !liveBeeped.current.has(p.roomId)) {
-        liveBeeped.current.add(p.roomId);
-        beep();
+        liveBeeped.current.add(p.roomId); beep(); setOpen(true);
         setTimeout(() => liveBeeped.current.delete(p.roomId), 12000);
       }
     });
-    // Prune speakers that stopped sending (closed tab / lost network).
     const prune = setInterval(() => {
       setLiveSpeakers((prev) => {
-        const now = Date.now();
-        let changed = false;
+        const now = Date.now(); let changed = false;
         const next: Record<string, LiveSpeakingPayload> = {};
-        for (const [k, v] of Object.entries(prev)) {
-          if (now - v.ts < 6000) next[k] = v; else changed = true;
-        }
+        for (const [k, v] of Object.entries(prev)) { if (now - v.ts < 6000) next[k] = v; else changed = true; }
         return changed ? next : prev;
       });
     }, 2000);
@@ -151,40 +169,242 @@ export default function GlobalCommandCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 
-  if (!mounted || !signedIn || !facilityId) return null;
-
+  const ws = facilityId ? store.getWorkspace(facilityId) : null;
+  const active = useMemo(() => (ws ? ws.requests.filter(isActive) : []), [ws]);
+  const criticalCount = active.filter((r) => urgencyOf(r) === "Critical").length;
   const speakers = Object.values(liveSpeakers).sort((a, b) => b.ts - a.ts);
 
-  const ws = store.getWorkspace(facilityId);
-  const active = ws.requests.filter(isActive);
-  const criticalCount = active.filter((r) => urgencyOf(r) === "Critical").length;
-  const queue = active.slice().sort((a, b) => {
-    const r = rankOf(b) - rankOf(a);
-    return r !== 0 ? r : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
+  // Group active requests by urgency, plus a recent-resolved section.
+  const groups = useMemo(() => {
+    const sorted = active.slice().sort((a, b) => {
+      const r = rankOf(b) - rankOf(a);
+      return r !== 0 ? r : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+    return URGENCY_ORDER.map((lvl) => ({ lvl, items: sorted.filter((r) => urgencyOf(r) === lvl) }))
+      .filter((g) => g.items.length > 0);
+  }, [active]);
+
+  const resolved = useMemo(
+    () => (ws ? ws.requests.filter((r) => r.status === "Resolved")
+      .sort((a, b) => new Date(b.resolvedAt ?? b.createdAt).getTime() - new Date(a.resolvedAt ?? a.createdAt).getTime())
+      .slice(0, 4) : []),
+    [ws],
+  );
+
+  // Lightweight live activity feed synthesized from request timestamps.
+  const activity = useMemo(() => {
+    if (!ws) return [] as { t: number; text: string; room: string }[];
+    const ev: { t: number; text: string; room: string }[] = [];
+    for (const r of ws.requests) {
+      ev.push({ t: new Date(r.createdAt).getTime(), text: "Request received", room: r.roomNumber });
+      if (r.acknowledgedAt) ev.push({ t: new Date(r.acknowledgedAt).getTime(), text: `Acknowledged by ${r.acknowledgedBy ?? "staff"}`, room: r.roomNumber });
+      if (r.resolvedAt) ev.push({ t: new Date(r.resolvedAt).getTime(), text: "Resolved", room: r.roomNumber });
+    }
+    return ev.sort((a, b) => b.t - a.t).slice(0, 6);
+  }, [ws]);
+
+  if (!mounted || !signedIn || !facilityId) return null;
 
   function setStatus(req: Request, status: Status) {
     store.transitionRequest(facilityId!, req.id, status, { type: "therapist", name: nurseName });
     updateRequestStatus(req.id, status, nurseName).catch(() => {});
   }
 
+  const spring = { type: "spring" as const, stiffness: 360, damping: 36, mass: 0.9 };
+
+  const panel = (
+    <>
+      {/* Floating toast bubble — appears even when the panel is closed */}
+      <AnimatePresence>
+        {toast && !open && (
+          <motion.button
+            key={toast.id}
+            initial={{ x: 140, opacity: 0, scale: 0.92 }}
+            animate={{ x: 0, opacity: 1, scale: 1 }}
+            exit={{ x: 140, opacity: 0, scale: 0.92 }}
+            transition={spring}
+            onClick={() => { setOpen(true); setToast(null); }}
+            className="fixed right-4 top-20 z-[80] flex w-[320px] items-start gap-3 rounded-2xl border border-white/60 bg-white/90 p-3.5 text-left shadow-[0_20px_60px_-12px_rgba(15,34,51,0.35)] backdrop-blur-xl"
+          >
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: URGENCY_META[toast.urgency].bg }}>
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: URGENCY_META[toast.urgency].dot }} />
+            </span>
+            <span className="min-w-0">
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide" style={{ color: URGENCY_META[toast.urgency].color }}>
+                  {URGENCY_META[toast.urgency].label}
+                </span>
+                <span className="text-sm font-bold text-navy">Room {toast.roomNumber}</span>
+              </span>
+              <span className="mt-0.5 block truncate text-sm text-slate">{toast.preview}</span>
+              <span className="mt-1 block text-xs font-semibold text-[#1d4ed8]">Tap to open command center →</span>
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* Slide-out panel */}
+      <AnimatePresence>
+        {open && (
+          <motion.div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            <div className="absolute inset-0 bg-navy/30 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
+            <motion.aside
+              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={spring}
+              className="absolute right-0 top-0 flex h-[100dvh] w-[93vw] max-w-[440px] flex-col bg-offwhite shadow-[0_0_80px_-10px_rgba(15,34,51,0.55)]"
+            >
+              {/* Brand header */}
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#0c2740] via-[#123a5c] to-[#1d4ed8] px-5 py-4 text-white">
+                <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-teal/30 blur-2xl" />
+                <div className="relative flex items-start justify-between">
+                  <div>
+                    <p className="text-base font-bold tracking-tight">Command center</p>
+                    <p className="mt-0.5 text-xs text-white/70">
+                      {criticalCount > 0 && <span className="font-semibold text-[#fca5a5]">{criticalCount} critical · </span>}
+                      {active.length} active{speakers.length > 0 && ` · ${speakers.length} speaking`}
+                    </p>
+                  </div>
+                  <button onClick={() => setOpen(false)} aria-label="Close"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/15 hover:text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+                {/* Live: speaking now */}
+                {speakers.length > 0 && (
+                  <section>
+                    <SectionHeader label="Speaking now" color="#16a34a" count={speakers.length} live />
+                    <div className="mt-2 space-y-2">
+                      <AnimatePresence initial={false}>
+                        {speakers.map((s) => {
+                          const critical = s.urgencyLevel === "Critical";
+                          const c = critical ? "#dc2626" : "#16a34a";
+                          return (
+                            <motion.div key={`live-${s.roomId}`} layout
+                              initial={{ opacity: 0, y: -8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+                              transition={spring}
+                              className="rounded-2xl border-2 bg-white p-3.5 shadow-soft" style={{ borderColor: c }}>
+                              <div className="flex items-center gap-2">
+                                <span className="relative flex h-2.5 w-2.5">
+                                  <span className="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full opacity-75" style={{ background: c }} />
+                                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: c }} />
+                                </span>
+                                <span className="text-xs font-bold uppercase tracking-wide" style={{ color: c }}>
+                                  {critical ? "Critical · speaking" : "Speaking"}
+                                </span>
+                                <span className="ml-auto text-sm font-bold text-navy">Room {s.roomNumber}</span>
+                              </div>
+                              <p className="mt-1.5 text-sm font-semibold text-navy">{s.residentName}</p>
+                              <p className="min-h-5 text-sm text-slate">
+                                {s.transcript ? <>&ldquo;{s.transcript}&rdquo;</> : <span className="text-slate/40">listening…</span>}
+                              </p>
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
+                  </section>
+                )}
+
+                {/* Active requests grouped by urgency */}
+                {groups.map((g) => (
+                  <section key={g.lvl}>
+                    <SectionHeader label={URGENCY_META[g.lvl].label} color={URGENCY_META[g.lvl].color} count={g.items.length} />
+                    <div className="mt-2 space-y-2">
+                      <AnimatePresence initial={false}>
+                        {g.items.map((req) => (
+                          <RequestCard key={req.id} req={req} onAck={() => setStatus(req, "Acknowledged")} onResolve={() => setStatus(req, "Resolved")} spring={spring} />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </section>
+                ))}
+
+                {/* Empty state */}
+                {groups.length === 0 && speakers.length === 0 && (
+                  <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-teal/30 bg-white/60 px-6 py-14 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-teal/15 to-[#1d4ed8]/15">
+                      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0f7d74" strokeWidth="1.8">
+                        <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <p className="mt-4 text-base font-bold text-navy">All patients assisted</p>
+                    <p className="mt-1 text-sm text-slate/60">No active requests right now. New requests appear here instantly.</p>
+                  </div>
+                )}
+
+                {/* Recently resolved */}
+                {resolved.length > 0 && (
+                  <section>
+                    <SectionHeader label="Resolved" color="#16a34a" count={resolved.length} muted />
+                    <div className="mt-2 space-y-2">
+                      {resolved.map((req) => (
+                        <div key={req.id} className="flex items-center gap-2 rounded-xl border border-gray-muted bg-white/70 px-3.5 py-2.5 opacity-70">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.4"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          <span className="text-sm font-semibold text-navy">Room {req.roomNumber}</span>
+                          <span className="truncate text-xs text-slate/50">{req.transcript || req.requestType}</span>
+                          <span className="ml-auto text-xs text-slate/40">{timeAgo(req.resolvedAt ?? req.createdAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Live activity feed */}
+                {activity.length > 0 && (
+                  <section>
+                    <SectionHeader label="Live activity" color="#1d4ed8" />
+                    <div className="mt-2 space-y-1 rounded-2xl border border-gray-muted bg-white/70 p-3">
+                      {activity.map((a, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-slate">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#1d4ed8]/50" />
+                          <span className="font-medium text-navy">Room {a.room}</span>
+                          <span className="text-slate/60">{a.text}</span>
+                          <span className="ml-auto text-slate/35">{timeAgo(new Date(a.t).toISOString())}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-gray-muted bg-white p-3">
+                <Link href="/command" onClick={() => setOpen(false)}
+                  className="flex items-center justify-center rounded-xl bg-gradient-to-r from-[#123a5c] to-[#1d4ed8] px-4 py-3 text-sm font-semibold text-white shadow-soft transition-transform hover:scale-[1.02]">
+                  Open full command center →
+                </Link>
+              </div>
+            </motion.aside>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+
   return (
     <>
-      {/* Bell button (lives in AppNav's right cluster) */}
+      {/* Bell */}
       <button
         onClick={() => setOpen(true)}
         aria-label="Open command center"
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-gray-muted bg-white text-slate hover:bg-offwhite"
+        className={`relative flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
+          criticalCount > 0 ? "border-coral/40 bg-coral/10 text-coral" : "border-gray-muted bg-white text-slate hover:border-[#1d4ed8]/40 hover:bg-[#1d4ed8]/5 hover:text-[#1d4ed8]"
+        }`}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M13.7 21a2 2 0 0 1-3.4 0" strokeLinecap="round" />
         </svg>
         {active.length > 0 && (
-          <span
-            className={`absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${criticalCount > 0 ? "animate-pulse" : ""}`}
-            style={{ background: criticalCount > 0 ? "#dc2626" : "#0f2233" }}
-          >
+          <span className={`absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${criticalCount > 0 ? "animate-pulse" : ""}`}
+            style={{ background: criticalCount > 0 ? "#dc2626" : "#1d4ed8" }}>
             {active.length}
           </span>
         )}
@@ -196,104 +416,71 @@ export default function GlobalCommandCenter() {
         )}
       </button>
 
-      {/* Slide-out panel */}
-      {open && (
-        <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-          <aside className="absolute right-0 top-0 flex h-full w-full max-w-[380px] flex-col bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-muted px-4 py-3">
-              <div>
-                <p className="text-sm font-bold text-navy">Command center</p>
-                <p className="text-xs text-slate/50">
-                  {criticalCount > 0 && <span className="font-semibold text-coral">🔴 {criticalCount} critical · </span>}
-                  {active.length} active request{active.length !== 1 ? "s" : ""}
-                </p>
-              </div>
-              <button onClick={() => setOpen(false)} aria-label="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate hover:bg-offwhite">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
-              {/* Live: patients speaking right now (Broadcast, no DB write) */}
-              {speakers.map((s) => {
-                const critical = s.urgencyLevel === "Critical";
-                return (
-                  <div key={`live-${s.roomId}`}
-                    className="rounded-xl border-2 bg-white p-3 shadow-soft"
-                    style={{ borderColor: critical ? "#dc2626" : "#16a34a" }}>
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-2.5 w-2.5">
-                        <span className="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full opacity-75"
-                          style={{ background: critical ? "#dc2626" : "#16a34a" }} />
-                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full"
-                          style={{ background: critical ? "#dc2626" : "#16a34a" }} />
-                      </span>
-                      <span className="text-xs font-bold uppercase tracking-wide"
-                        style={{ color: critical ? "#dc2626" : "#16a34a" }}>
-                        {critical ? "Critical · speaking now" : "Speaking now"}
-                      </span>
-                      <span className="ml-auto text-sm font-bold text-navy">Room {s.roomNumber}</span>
-                    </div>
-                    <p className="mt-1.5 text-sm font-medium text-navy">{s.residentName}</p>
-                    <p className="min-h-5 text-sm text-slate">
-                      {s.transcript ? <>&ldquo;{s.transcript}&rdquo;</> : <span className="text-slate/40">listening…</span>}
-                    </p>
-                  </div>
-                );
-              })}
-
-              {queue.length === 0 && speakers.length === 0 && (
-                <p className="px-2 py-10 text-center text-sm text-slate/40">All clear. No active requests.</p>
-              )}
-              {queue.map((req) => {
-                const u = urgencyOf(req);
-                const m = URGENCY_META[u];
-                return (
-                  <div key={req.id} className="rounded-xl border bg-white p-3 shadow-soft"
-                    style={{ borderLeftWidth: 4, borderLeftColor: m.color }}>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold"
-                        style={{ color: m.color, background: m.bg }}>
-                        <span className="h-1.5 w-1.5 rounded-full" style={{ background: m.dot }} />
-                        {m.label}
-                      </span>
-                      <span className="text-sm font-bold text-navy">Room {req.roomNumber}</span>
-                      <span className="ml-auto text-[11px] text-slate/40">{timeAgo(req.createdAt)}</span>
-                    </div>
-                    <p className="mt-1.5 text-sm font-medium text-navy">{req.residentName}</p>
-                    <p className="text-sm text-slate">{req.transcript || req.aiSummary || `${req.requestType} request`}</p>
-                    {req.triageReason && <p className="mt-0.5 text-xs text-slate/50">{req.triageReason}</p>}
-                    <div className="mt-2.5 flex gap-2">
-                      {req.status === "New" && (
-                        <button onClick={() => setStatus(req, "Acknowledged")}
-                          className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0c2030]">
-                          Acknowledge
-                        </button>
-                      )}
-                      <button onClick={() => setStatus(req, "Resolved")}
-                        className="rounded-lg border border-gray-muted px-3 py-1.5 text-xs font-semibold text-slate hover:bg-offwhite">
-                        Resolve
-                      </button>
-                      <span className="ml-auto self-center text-[11px] font-medium text-slate/50">{req.status}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="border-t border-gray-muted p-3">
-              <Link href="/command" onClick={() => setOpen(false)}
-                className="flex items-center justify-center rounded-lg bg-offwhite px-4 py-2.5 text-sm font-semibold text-navy hover:bg-navy/5">
-                Open full command center →
-              </Link>
-            </div>
-          </aside>
-        </div>
-      )}
+      {typeof document !== "undefined" && createPortal(panel, document.body)}
     </>
+  );
+}
+
+function SectionHeader({ label, color, count, live, muted }: { label: string; color: string; count?: number; live?: boolean; muted?: boolean }) {
+  return (
+    <div className="flex items-center gap-2 px-1">
+      <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
+        style={{ color, background: muted ? "transparent" : `${color}14` }}>
+        {live && (
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full opacity-75" style={{ background: color }} />
+            <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: color }} />
+          </span>
+        )}
+        {label}
+      </span>
+      {count !== undefined && <span className="text-xs font-semibold text-slate/40">{count}</span>}
+      <span className="ml-1 h-px flex-1" style={{ background: `${color}22` }} />
+    </div>
+  );
+}
+
+function RequestCard({ req, onAck, onResolve, spring }: {
+  req: Request; onAck: () => void; onResolve: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  spring: any;
+}) {
+  const u = urgencyOf(req);
+  const m = URGENCY_META[u];
+  return (
+    <motion.div layout
+      initial={{ opacity: 0, y: -10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96, height: 0 }}
+      transition={spring}
+      className="overflow-hidden rounded-2xl border border-gray-muted bg-white p-3.5 shadow-soft transition-shadow hover:shadow-panel"
+      style={{ borderLeftWidth: 4, borderLeftColor: m.color }}>
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold"
+          style={{ color: m.color, background: m.bg }}>
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: m.dot }} />
+          {m.label}
+        </span>
+        <span className="text-sm font-bold text-navy">Room {req.roomNumber}</span>
+        <span className="ml-auto text-[11px] text-slate/40">{timeAgo(req.createdAt)}</span>
+      </div>
+      <p className="mt-1.5 text-sm font-semibold text-navy">{req.residentName}</p>
+      <p className="text-sm text-slate">{req.transcript || req.aiSummary || `${req.requestType} request`}</p>
+      {req.triageReason && <p className="mt-0.5 text-xs text-slate/50">{req.triageReason}</p>}
+      {req.assignedTherapist && (
+        <p className="mt-1 text-xs font-medium text-[#1d4ed8]">Assigned · {req.assignedTherapist}</p>
+      )}
+      <div className="mt-3 flex items-center gap-2">
+        {req.status === "New" && (
+          <button onClick={onAck}
+            className="rounded-lg bg-gradient-to-r from-[#123a5c] to-[#1d4ed8] px-3.5 py-1.5 text-xs font-semibold text-white shadow-soft transition-transform hover:scale-[1.03] active:scale-95">
+            Acknowledge
+          </button>
+        )}
+        <button onClick={onResolve}
+          className="rounded-lg border border-gray-muted px-3.5 py-1.5 text-xs font-semibold text-slate transition-colors hover:border-success/40 hover:bg-success/5 hover:text-success active:scale-95">
+          Resolve
+        </button>
+        <span className="ml-auto text-[11px] font-medium text-slate/50">{req.status}</span>
+      </div>
+    </motion.div>
   );
 }
