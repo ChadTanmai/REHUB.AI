@@ -196,6 +196,26 @@ export async function updateRequestStatus(
   }
 }
 
+/** Nurse-side: persist AI-enriched triage (urgency/reason/action/summary). */
+export async function updateRequestTriage(
+  id: string,
+  patch: { urgencyLevel?: string; triageReason?: string; suggestedAction?: string },
+): Promise<boolean> {
+  try {
+    const supabase = getAuthClient();
+    const row: Record<string, unknown> = {};
+    if (patch.urgencyLevel) row.urgency_level = patch.urgencyLevel;
+    if (patch.triageReason) row.triage_reason = patch.triageReason;
+    if (patch.suggestedAction) row.suggested_action = patch.suggestedAction;
+    if (Object.keys(row).length === 0) return true;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("patient_messages").update(row).eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 export interface RequestStatusInfo {
   status: string;
   acknowledgedBy: string | null;

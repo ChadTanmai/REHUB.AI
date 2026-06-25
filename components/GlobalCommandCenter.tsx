@@ -28,8 +28,10 @@ import {
   fetchFacilityRequestsDiag,
   subscribeFacilityRequests,
   updateRequestStatus,
+  updateRequestTriage,
 } from "@/lib/supabase/requests";
 import { subscribeLiveSpeaking, type LiveSpeakingPayload } from "@/lib/supabase/liveChannel";
+import { aiTriage } from "@/lib/ai/client";
 
 const URGENCY_ORDER: UrgencyLevel[] = ["Critical", "High", "Medium", "Low", "Informational"];
 
@@ -76,6 +78,7 @@ export default function GlobalCommandCenter() {
   const seenCritical = useRef<Set<string>>(new Set());
   const seenIds = useRef<Set<string>>(new Set());
   const liveBeeped = useRef<Set<string>>(new Set());
+  const aiTriaged = useRef<Set<string>>(new Set());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const store = getStore();
@@ -101,6 +104,38 @@ export default function GlobalCommandCenter() {
     toastTimer.current = setTimeout(() => setToast(null), 5500);
   }
 
+  // Smarter triage: ask Claude to re-read the patient's words. Safety-biased —
+  // we only ever RAISE urgency (never silently downgrade the deterministic
+  // result), and always enrich the reason/action/summary. No-ops without a key.
+  async function enrichWithAI(reqId: string) {
+    if (!facilityId || aiTriaged.current.has(reqId)) return;
+    aiTriaged.current.add(reqId);
+    const req = store.getWorkspace(facilityId).requests.find((r) => r.id === reqId);
+    if (!req) return;
+    const text = (req.transcript ?? req.aiSummary ?? "").trim();
+    if (!text) return;
+    const current = urgencyOf(req);
+    const ai = await aiTriage(text, current);
+    if (!ai) return;
+    const raised = URGENCY_META[ai.urgencyLevel].rank > URGENCY_META[current].rank;
+    const finalUrgency = raised ? ai.urgencyLevel : current;
+    store.applyAiTriage(facilityId, reqId, {
+      urgencyLevel: finalUrgency,
+      triageReason: ai.triageReason,
+      suggestedAction: ai.suggestedAction,
+      aiSummary: ai.summary,
+    });
+    updateRequestTriage(reqId, {
+      urgencyLevel: finalUrgency,
+      triageReason: ai.triageReason,
+      suggestedAction: ai.suggestedAction,
+    }).catch(() => {});
+    if (finalUrgency === "Critical" && !seenCritical.current.has(reqId)) {
+      seenCritical.current.add(reqId);
+      beep();
+    }
+  }
+
   useEffect(() => {
     if (!facilityId) return;
     let activeFlag = true;
@@ -114,6 +149,7 @@ export default function GlobalCommandCenter() {
         if (r.urgencyLevel === "Critical" && stillActive && !seenCritical.current.has(r.id)) {
           seenCritical.current.add(r.id); beep();
         }
+        if (stillActive) void enrichWithAI(r.id);
       }
       firstLoad = false;
     };
@@ -129,6 +165,7 @@ export default function GlobalCommandCenter() {
         const req = store.getWorkspace(facilityId).requests.find((x) => x.id === r.id);
         if (req) showToast(req);
         if (r.urgencyLevel === "Critical") setOpen(true); // auto-open on Critical
+        void enrichWithAI(r.id); // smarter triage (no-op without an API key)
       }
       if (r.urgencyLevel === "Critical" && !seenCritical.current.has(r.id)) {
         seenCritical.current.add(r.id); beep();

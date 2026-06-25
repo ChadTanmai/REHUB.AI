@@ -892,6 +892,27 @@ class RehubStore {
     return changed;
   }
 
+  /** Apply AI-enriched triage to a request (urgency/reason/action/summary). */
+  applyAiTriage(
+    facilityId: string,
+    requestId: string,
+    patch: { urgencyLevel?: import("./types").UrgencyLevel; triageReason?: string; suggestedAction?: string; aiSummary?: string },
+  ): Request | null {
+    const ws = this.ensureFacility(facilityId);
+    const req = ws.requests.find((r) => r.id === requestId);
+    if (!req) return null;
+    if (patch.urgencyLevel) {
+      req.urgencyLevel = patch.urgencyLevel;
+      if (patch.urgencyLevel === "Critical") req.safetyFlag = true;
+    }
+    if (patch.triageReason) req.triageReason = patch.triageReason;
+    if (patch.suggestedAction) req.suggestedAction = patch.suggestedAction;
+    if (patch.aiSummary) req.aiSummary = patch.aiSummary;
+    this.persist(facilityId, false);
+    this.emit();
+    return req;
+  }
+
   /** Claim a request without changing status ("Assign to Me"). */
   assignRequest(
     facilityId: string,

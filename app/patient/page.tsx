@@ -8,6 +8,7 @@ import { enqueueRequest, ensureAutoFlush } from "@/lib/supabase/outbox";
 import { getRequestStatus } from "@/lib/supabase/requests";
 import { openLiveBroadcaster } from "@/lib/supabase/liveChannel";
 import { classifyRequest } from "@/lib/aiClassifier";
+import { aiConverse } from "@/lib/ai/client";
 import { primeTTS, speak } from "@/lib/tts";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
@@ -31,6 +32,9 @@ export default function PatientPage() {
   const [showTyping, setShowTyping] = useState(false);
   const [typedDraft, setTypedDraft] = useState("");
   const [sttError, setSttError] = useState("");
+  // Optional AI clarifying question shown after a non-urgent request.
+  const [clarify, setClarify] = useState<string | null>(null);
+  const [clarifyDraft, setClarifyDraft] = useState("");
   // Pulses true briefly each time new speech arrives → drives the live animation.
   const [voiceActive, setVoiceActive] = useState(false);
 
@@ -142,6 +146,8 @@ export default function PatientPage() {
     stopPolling();
     setFlow("idle");
     setAckBy(null);
+    setClarify(null);
+    setClarifyDraft("");
   }
 
   function startListening() {
@@ -257,8 +263,26 @@ export default function PatientPage() {
     );
     setFlow("sent");
     setAckBy(null);
+    setClarify(null);
+    setClarifyDraft("");
     setTranscript("");
     transcriptRef.current = "";
+
+    // Patient conversation: for non-urgent requests, AI may offer ONE gentle
+    // clarifying question to help staff respond faster. Never for emergencies,
+    // and never blocking — the request is already on its way. No-op without a key.
+    if (text && (req.urgencyLevel ?? "Medium") !== "Critical") {
+      aiConverse(text).then((c) => {
+        if (c && !c.done && c.reply) setClarify(c.reply);
+      });
+    }
+  }
+
+  function sendClarify() {
+    const detail = clarifyDraft.trim();
+    setClarify(null);
+    setClarifyDraft("");
+    if (detail) sendRequest("Typed", detail);
   }
 
   function handleLeave() {
@@ -352,7 +376,30 @@ export default function PatientPage() {
             </div>
             <p className="text-3xl font-bold text-navy">Help is on the way</p>
             <p className="text-lg text-slate/60">Your care team has been notified.</p>
-            <p className="text-sm text-slate/40">Waiting for staff to respond…</p>
+            {clarify ? (
+              <div className="mt-2 w-full max-w-md rounded-2xl border border-teal/30 bg-white/70 p-4 text-left shadow-soft">
+                <p className="text-base font-medium text-navy">{clarify}</p>
+                <textarea
+                  value={clarifyDraft}
+                  onChange={(e) => setClarifyDraft(e.target.value)}
+                  rows={2}
+                  placeholder="Optional — tap to add detail"
+                  className="mt-2 w-full rounded-xl border border-gray-muted bg-white px-3 py-2 text-base text-navy focus:outline-none focus:ring-2 focus:ring-teal/40"
+                />
+                <div className="mt-2 flex gap-2">
+                  <button onClick={sendClarify}
+                    className="flex-1 rounded-xl bg-teal py-2.5 text-sm font-bold text-white hover:bg-[#2c9c97]">
+                    Send detail
+                  </button>
+                  <button onClick={() => setClarify(null)}
+                    className="rounded-xl border border-gray-muted px-4 py-2.5 text-sm font-semibold text-slate hover:bg-offwhite">
+                    Skip
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate/40">Waiting for staff to respond…</p>
+            )}
             <button onClick={resetFlow}
               className="mt-2 rounded-2xl border border-slate/20 bg-white/60 px-7 py-3 text-base font-semibold text-slate hover:bg-white">
               Done
