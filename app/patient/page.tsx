@@ -8,7 +8,7 @@ import { enqueueRequest, ensureAutoFlush } from "@/lib/supabase/outbox";
 import { getRequestStatus } from "@/lib/supabase/requests";
 import { openLiveBroadcaster } from "@/lib/supabase/liveChannel";
 import { classifyRequest } from "@/lib/aiClassifier";
-import { aiConverse } from "@/lib/ai/client";
+import { aiConverse, aiRoute, aiAsk } from "@/lib/ai/client";
 import { primeTTS, speak } from "@/lib/tts";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
@@ -35,25 +35,26 @@ export default function PatientPage() {
   // Optional AI clarifying question shown after a non-urgent request.
   const [clarify, setClarify] = useState<string | null>(null);
   const [clarifyDraft, setClarifyDraft] = useState("");
+  // Smart routing: staff member the patient addressed by name.
+  const [routedTo, setRoutedTo] = useState<string | null>(null);
+  // AI ask assistant — patient can ask questions without notifying nurses.
+  const [askMode, setAskMode] = useState(false);
+  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [askLoading, setAskLoading] = useState(false);
   // Pulses true briefly each time new speech arrives → drives the live animation.
   const [voiceActive, setVoiceActive] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recRef = useRef<any>(null);
   const transcriptRef = useRef("");
+  const askModeRef = useRef(false); // ref so stopListening() can read it synchronously
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
   const liveRef = useRef<{ send: (p: import("@/lib/supabase/liveChannel").LiveSpeakingPayload) => void; close: () => void } | null>(null);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keep delivering any queued patient requests in the background (retry on
-  // reconnect / focus). The timer is a module singleton, so no cleanup needed.
   useEffect(() => { ensureAutoFlush(); }, []);
-
-  useEffect(() => {
-    return () => stopEverything();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { return () => stopEverything(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   if (!mounted) return <div className="min-h-screen" style={{ background: "#F5F1E8" }} />;
 
@@ -79,14 +80,12 @@ export default function PatientPage() {
     if (voiceTimerRef.current) { clearTimeout(voiceTimerRef.current); voiceTimerRef.current = null; }
   }
 
-  // Brief "voice active" pulse (drives the live animation without a 2nd mic).
   function pulseVoice() {
     setVoiceActive(true);
     if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
     voiceTimerRef.current = setTimeout(() => setVoiceActive(false), 350);
   }
 
-  // Push a live partial transcript to the nurse via Broadcast (best-effort).
   function broadcastLive(text: string, speaking: boolean) {
     if (!liveRef.current) return;
     const urgency = text.trim() ? classifyRequest(text).urgencyLevel ?? null : null;
@@ -101,7 +100,6 @@ export default function PatientPage() {
     });
   }
 
-  // Tell the nurse the patient stopped speaking, then tear down the channel.
   function closeLive(sendStop: boolean) {
     if (!liveRef.current) return;
     if (sendStop) broadcastLive(transcriptRef.current, false);
@@ -111,9 +109,7 @@ export default function PatientPage() {
 
   /**
    * Poll the cloud for this request's status until a nurse acknowledges (or a
-   * timeout). When acknowledged, show + SPEAK the confirmation with the staff
-   * name. RPC is anon-safe (security definer), so it works on the patient's
-   * un-authenticated device on any network.
+   * timeout). When acknowledged, show + SPEAK the confirmation with the staff name.
    */
   function startAckPolling(messageId: string) {
     stopPolling();
@@ -121,7 +117,6 @@ export default function PatientPage() {
     const check = async () => {
       const info = await getRequestStatus(messageId);
       if (!info) {
-        // Give up quietly after ~3 minutes if we never get a reading.
         if (Date.now() - pollStartRef.current > 180_000) stopPolling();
         return;
       }
@@ -131,7 +126,8 @@ export default function PatientPage() {
         setAckBy(name || null);
         setFlow("ack");
         const who = session!.patientName.split(" ")[0] || "there";
-        speak(
+        // Natural AI voice (ElevenLabs) with Web Speech fallback
+        void speak(
           name
             ? `Hi ${who}! Good news — ${name} got your message and is on the way to help you. Hang tight, you're in good hands.`
             : `Hi ${who}! Good news — your care team got your message and is on the way to help you. Hang tight, you're in good hands.`,
@@ -148,11 +144,13 @@ export default function PatientPage() {
     setAckBy(null);
     setClarify(null);
     setClarifyDraft("");
+    setRoutedTo(null);
+    setAskAnswer(null);
   }
 
   function startListening() {
-    // Unlock text-to-speech inside this user gesture so the spoken nurse
-    // confirmation can autoplay later without another tap.
+    // Unlock TTS (Web Speech + AudioContext) inside this user gesture so the
+    // spoken nurse confirmation and AI answers autoplay later without another tap.
     primeTTS();
     setTranscript("");
     transcriptRef.current = "";
@@ -162,7 +160,6 @@ export default function PatientPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SRClass = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
     if (!SRClass) {
-      // No speech recognition on this browser (common on iOS): typed fallback.
       setRecording(true);
       setShowTyping(true);
       return;
@@ -171,18 +168,17 @@ export default function PatientPage() {
     setRecording(true);
     setShowTyping(false);
 
-    // Open the live broadcast channel so the nurse sees words as they're spoken.
-    liveRef.current = openLiveBroadcaster(facilityId);
-    broadcastLive("", true);
+    // Only open live broadcast for staff requests, not for ask-mode questions
+    if (!askModeRef.current) {
+      liveRef.current = openLiveBroadcaster(facilityId);
+      broadcastLive("", true);
+    }
 
-    // IMPORTANT: do NOT open a second microphone stream (getUserMedia) here.
-    // On phones a second mic capture steals audio from SpeechRecognition and
-    // you get an empty transcript. SpeechRecognition owns the mic alone.
     const rec: SR = new SRClass();
     recRef.current = rec;
     rec.lang = "en-US";
     rec.interimResults = true;
-    rec.continuous = false; // mobile-friendly: continuous is unreliable on iOS
+    rec.continuous = false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
       const t = Array.from(e.results as unknown[])
@@ -191,13 +187,11 @@ export default function PatientPage() {
       transcriptRef.current = t;
       setTranscript(t);
       pulseVoice();
-      // Stream the partial transcript to the nurse immediately (no DB write).
-      broadcastLive(t, true);
+      if (!askModeRef.current) broadcastLive(t, true);
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onerror = (e: any) => {
       const err = e?.error ?? "unknown";
-      // no-speech / aborted are benign; for real failures offer typing.
       if (err !== "no-speech" && err !== "aborted") {
         setSttError(err === "not-allowed" ? "Microphone permission was blocked." : `Voice error: ${err}`);
         setShowTyping(true);
@@ -218,7 +212,15 @@ export default function PatientPage() {
     setRecording(false);
     setShowTyping(false);
     const finalText = transcriptRef.current.trim();
-    sendRequest(finalText ? "Voice" : "Button", finalText);
+
+    if (askModeRef.current) {
+      // Ask mode: send to AI instead of nurses
+      askModeRef.current = false;
+      setAskMode(false);
+      void sendAsk(finalText);
+    } else {
+      sendRequest(finalText ? "Voice" : "Button", finalText);
+    }
   }
 
   function sendTyped() {
@@ -234,17 +236,32 @@ export default function PatientPage() {
 
   function toggleTalk() {
     if (flow !== "idle") return;
-    if (recording) stopListening();
-    else startListening();
+    if (recording) {
+      stopListening();
+    } else {
+      askModeRef.current = false;
+      setAskMode(false);
+      startListening();
+    }
+  }
+
+  function toggleAsk() {
+    if (flow !== "idle") return;
+    if (recording) {
+      // Stop whatever is currently recording
+      stopListening();
+    } else {
+      setAskAnswer(null);
+      askModeRef.current = true;
+      setAskMode(true);
+      startListening();
+    }
   }
 
   function sendRequest(source: "Button" | "Voice" | "Typed", text: string) {
     if (!room) return;
+    setRoutedTo(null);
     const req = store.submitRequest({ facilityId, roomId, source, text: text || undefined });
-    // Deliver to the nurse command center via the durable outbox: it retries on
-    // a dropped connection / focus / reconnect so an emergency request is never
-    // silently lost. When delivered, we get the cloud id back and start polling
-    // for the nurse's acknowledgement.
     void enqueueRequest(
       {
         facilityCode: session!.facilityCode,
@@ -268,13 +285,43 @@ export default function PatientPage() {
     setTranscript("");
     transcriptRef.current = "";
 
-    // Patient conversation: for non-urgent requests, AI may offer ONE gentle
-    // clarifying question to help staff respond faster. Never for emergencies,
-    // and never blocking — the request is already on its way. No-op without a key.
+    // Smart routing: if patient mentioned a staff name, detect and surface it
+    const therapistNames = ws.therapists.map((t) => t.name);
+    if (text && therapistNames.length > 0) {
+      aiRoute(text, therapistNames).then((result) => {
+        if (result?.staffName) setRoutedTo(result.staffName);
+      }).catch(() => {});
+    }
+
+    // Patient conversation: AI clarifying question for non-urgent requests
     if (text && (req.urgencyLevel ?? "Medium") !== "Critical") {
       aiConverse(text).then((c) => {
         if (c && !c.done && c.reply) setClarify(c.reply);
       });
+    }
+  }
+
+  /** AI ask assistant — answers the patient without notifying nurses. */
+  async function sendAsk(question: string) {
+    if (!question.trim()) {
+      setAskMode(false);
+      return;
+    }
+    setAskLoading(true);
+    setAskAnswer(null);
+    const therapists = ws.therapists.map((t) => `${t.name} (${t.role})`).join(", ");
+    const result = await aiAsk(question, {
+      patientName: session!.patientName,
+      roomNumber: session!.roomNumber,
+      facilityName: session!.facilityName,
+      staffContext: therapists ? `Staff on duty: ${therapists}.` : "",
+    });
+    setAskLoading(false);
+    if (result?.answer) {
+      setAskAnswer(result.answer);
+      void speak(result.answer);
+    } else {
+      setAskAnswer("I'm sorry, I wasn't able to get an answer. Please ask your nurse.");
     }
   }
 
@@ -329,9 +376,8 @@ export default function PatientPage() {
   }
 
   // ── Home ───────────────────────────────────────────────────────────────────
-  // Animation: a gentle CSS pulse (no live mic meter — a second mic stream
-  // breaks speech recognition on phones). Faster pulse while recording.
   const glowOpacity = recording ? 0.4 : 0.25;
+  const isAsk = askMode || askLoading || !!askAnswer;
 
   return (
     <div className="relative flex min-h-screen flex-col select-none overflow-hidden" style={{ background: "#F5F1E8" }}>
@@ -376,6 +422,14 @@ export default function PatientPage() {
             </div>
             <p className="text-3xl font-bold text-navy">Help is on the way</p>
             <p className="text-lg text-slate/60">Your care team has been notified.</p>
+            {routedTo && (
+              <div className="flex items-center gap-2 rounded-full bg-[#1d4ed8]/10 px-4 py-1.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2">
+                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="text-sm font-semibold text-[#1d4ed8]">Directed to {routedTo}</span>
+              </div>
+            )}
             {clarify ? (
               <div className="mt-2 w-full max-w-md rounded-2xl border border-teal/30 bg-white/70 p-4 text-left shadow-soft">
                 <p className="text-base font-medium text-navy">{clarify}</p>
@@ -407,8 +461,42 @@ export default function PatientPage() {
           </div>
         ) : (
           <div className="flex flex-col items-center">
+            {/* AI Ask answer card */}
+            {(askLoading || askAnswer) && !recording && (
+              <div className="mb-6 w-full max-w-md rounded-2xl border border-[#7c3aed]/20 bg-[#7c3aed]/5 p-4 shadow-soft">
+                {askLoading ? (
+                  <div className="flex items-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#7c3aed]/30 border-t-[#7c3aed]" />
+                    <p className="text-sm font-medium text-[#7c3aed]">AI assistant is thinking…</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="#7c3aed" stroke="none">
+                        <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 17h-2v-2h2zm0-4h-2V7h2z" />
+                      </svg>
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-[#7c3aed]">AI Assistant</p>
+                    </div>
+                    <p className="text-sm leading-relaxed text-navy">{askAnswer}</p>
+                    <button onClick={() => setAskAnswer(null)}
+                      className="mt-2 text-xs text-[#7c3aed]/60 hover:text-[#7c3aed]">
+                      Dismiss
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
             <p className="mb-10 text-center text-lg font-medium text-slate/50">
-              {showTyping ? "Type your message to staff" : recording ? "I'm listening…" : "Tap the circle to talk to staff"}
+              {showTyping
+                ? "Type your message to staff"
+                : recording && askMode
+                  ? "Ask me anything — I'm listening…"
+                  : recording
+                    ? "I'm listening…"
+                    : isAsk
+                      ? "Ask AI anything about your care"
+                      : "Tap the circle to talk to staff"}
             </p>
 
             {/* THE BIG TAP-TO-TALK CIRCLE */}
@@ -420,26 +508,33 @@ export default function PatientPage() {
             >
               {/* Outer glow */}
               <span
-                className={`absolute rounded-full ${recording ? "animate-[pulse_1.4s_ease-in-out_infinite]" : "animate-[pulse_2.6s_ease-in-out_infinite]"}`}
+                className={`absolute rounded-full ${recording && !askMode ? "animate-[pulse_1.4s_ease-in-out_infinite]" : "animate-[pulse_2.6s_ease-in-out_infinite]"}`}
                 style={{
                   width: 300, height: 300,
-                  background: "radial-gradient(circle, rgba(56,178,172,0.45) 0%, rgba(56,178,172,0) 70%)",
+                  background: recording && askMode
+                    ? "radial-gradient(circle, rgba(124,58,237,0.35) 0%, rgba(124,58,237,0) 70%)"
+                    : "radial-gradient(circle, rgba(56,178,172,0.45) 0%, rgba(56,178,172,0) 70%)",
                   opacity: glowOpacity,
                 }}
               />
               {/* Border ring */}
               <span
                 className={`absolute rounded-full border-2 ${recording ? "animate-[ping_1.6s_ease-in-out_infinite]" : "animate-[pulse_2.6s_ease-in-out_infinite]"}`}
-                style={{ width: 260, height: 260, borderColor: "rgba(56,178,172,0.35)" }}
+                style={{
+                  width: 260, height: 260,
+                  borderColor: recording && askMode ? "rgba(124,58,237,0.35)" : "rgba(56,178,172,0.35)",
+                }}
               />
-              {/* Core — scales up briefly as words arrive (voice-reactive) */}
+              {/* Core */}
               <span
                 className="relative flex items-center justify-center rounded-full text-white shadow-[0_12px_40px_rgba(56,178,172,0.45)] transition-transform duration-200 ease-out"
                 style={{
                   width: 220, height: 220,
-                  background: recording
-                    ? "radial-gradient(circle at 50% 40%, #4fd1c5, #319795)"
-                    : "radial-gradient(circle at 50% 40%, #3fc0b8, #2c9c97)",
+                  background: recording && askMode
+                    ? "radial-gradient(circle at 50% 40%, #9f67ff, #7c3aed)"
+                    : recording
+                      ? "radial-gradient(circle at 50% 40%, #4fd1c5, #319795)"
+                      : "radial-gradient(circle at 50% 40%, #3fc0b8, #2c9c97)",
                   transform: `scale(${voiceActive ? 1.08 : recording ? 1.02 : 1})`,
                 }}
               >
@@ -454,7 +549,7 @@ export default function PatientPage() {
               {recording && !showTyping && transcript && (
                 <p className="text-lg text-slate/70">&ldquo;{transcript}&rdquo;</p>
               )}
-              {!recording && !sttError && (
+              {!recording && !sttError && !isAsk && (
                 <p className="text-sm text-slate/40">
                   Tap once to start talking · tap again to send
                 </p>
@@ -464,7 +559,22 @@ export default function PatientPage() {
               )}
             </div>
 
-            {/* Typed fallback (no speech recognition / mic blocked) */}
+            {/* AI Ask button */}
+            {!recording && !showTyping && !sttError && (
+              <button
+                onClick={toggleAsk}
+                className="mt-5 flex items-center gap-2 rounded-full border border-[#7c3aed]/25 bg-[#7c3aed]/8 px-5 py-2.5 text-sm font-semibold text-[#7c3aed] transition-colors hover:bg-[#7c3aed]/15"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" strokeLinecap="round" />
+                  <circle cx="12" cy="17" r=".5" fill="currentColor" />
+                </svg>
+                {askLoading ? "Thinking…" : "Ask AI a question"}
+              </button>
+            )}
+
+            {/* Typed fallback */}
             {showTyping && (
               <div className="mt-4 w-full max-w-md">
                 <textarea

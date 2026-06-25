@@ -54,3 +54,44 @@ export function aiHandoff(
 ): Promise<{ report: string } | null> {
   return callAI<{ report: string }>({ task: "handoff", facilityName, requests }, 30000);
 }
+
+/**
+ * Resolve who a patient is addressing in their message.
+ * "Tell Sarah I need water" → { staffName: "Sarah Johnson" } or null.
+ * Returns null when unavailable or when no specific name was mentioned.
+ */
+export function aiRoute(
+  text: string,
+  staffNames: string[],
+): Promise<{ staffName: string | null } | null> {
+  return callAI<{ staffName: string | null }>({ task: "route", text, staffNames }, 5000);
+}
+
+/**
+ * Generate a suggested nurse response for a patient request.
+ * Gives the nurse a warm, pre-written message they can send with one click.
+ */
+export function aiCopilot(req: {
+  residentName: string;
+  summary: string;
+  urgency: string;
+  requestType: string;
+}): Promise<{ response: string } | null> {
+  return callAI<{ response: string }>({ task: "copilot", ...req }, 6000);
+}
+
+/**
+ * Patient voice assistant — answers a patient's question without notifying nurses.
+ * "Who is my nurse?", "When is therapy?", "What time is dinner?" etc.
+ */
+export function aiAsk(
+  question: string,
+  context: {
+    patientName?: string;
+    roomNumber?: string;
+    facilityName?: string;
+    staffContext?: string;
+  },
+): Promise<{ answer: string } | null> {
+  return callAI<{ answer: string }>({ task: "ask", question, ...context }, 8000);
+}

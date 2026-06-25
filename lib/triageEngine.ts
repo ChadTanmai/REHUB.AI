@@ -192,8 +192,11 @@ export function triage(
   let escalated = false;
 
   // SAFETY BIAS: low confidence near a boundary → round up one level.
+  // Only when a REAL signal fired — an unrecognized message (empty/garbled
+  // transcript) must NOT be auto-escalated to Urgent. No words = no emergency
+  // signal to round up from; it stays Medium ("send someone to check").
   const NEAR = { Critical: 85, High: 45, Medium: 28, Low: 12, Informational: 0 } as const;
-  if (confidence < 0.6 && urgency !== "Critical") {
+  if (anyFired && confidence < 0.6 && urgency !== "Critical") {
     const dist = score - NEAR[urgency];
     if (dist <= 8) {
       urgency = bumpUp(urgency);

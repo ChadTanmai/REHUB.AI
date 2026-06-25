@@ -190,7 +190,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
                 </div>
-                <Link href="/therapist" className="rounded-md bg-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-coral/90">
+                <Link href="/command" className="rounded-md bg-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-coral/90">
                   View now
                 </Link>
               </motion.div>
@@ -283,8 +283,8 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <StatCard label="Rooms" value={ws.rooms.length} href="/rooms" />
                   <StatCard label="Staff" value={ws.therapists.length} href="/facility" />
-                  <StatCard label="Active requests" value={activeRequests.length} href="/therapist" />
-                  <StatCard label="Urgent" value={urgentCount} href="/therapist" accent={urgentCount > 0} />
+                  <StatCard label="Active requests" value={activeRequests.length} href="/command" />
+                  <StatCard label="Urgent" value={urgentCount} href="/command" accent={urgentCount > 0} />
                 </div>
               )}
 
@@ -294,7 +294,7 @@ export default function DashboardPage() {
                   icon={<HeartPulseIcon />}
                   label="Care queue"
                   desc="Live request queue and staff workflow"
-                  href="/therapist"
+                  href="/command"
                   primary
                 />
                 <NavCard

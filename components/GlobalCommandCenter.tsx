@@ -484,12 +484,49 @@ function RequestCard({ req, onAck, onResolve, spring }: {
 }) {
   const u = urgencyOf(req);
   const m = URGENCY_META[u];
+  const [copilot, setCopilot] = useState<string | null>(null);
+  const [copilotLoading, setCopilotLoading] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function loadCopilot() {
+    if (copilot) { setCopilotOpen((v) => !v); return; }
+    if (copilotLoading) return;
+    setCopilotLoading(true);
+    setCopilotOpen(true);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: "copilot",
+          residentName: req.residentName,
+          summary: req.aiSummary || req.transcript || req.requestType,
+          urgency: u,
+          requestType: req.requestType,
+        }),
+      });
+      const data = await res.json();
+      if (data?.response) setCopilot(data.response);
+    } catch { /* ignore */ }
+    finally { setCopilotLoading(false); }
+  }
+
+  function copyResponse() {
+    if (!copilot) return;
+    navigator.clipboard.writeText(copilot).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
     <motion.div layout
       initial={{ opacity: 0, y: -10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96, height: 0 }}
       transition={spring}
       className="overflow-hidden rounded-2xl border border-gray-muted bg-white p-3.5 shadow-soft transition-shadow hover:shadow-panel"
       style={{ borderLeftWidth: 4, borderLeftColor: m.color }}>
+
+      {/* Header row */}
       <div className="flex items-center gap-2">
         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold"
           style={{ color: m.color, background: m.bg }}>
@@ -499,12 +536,32 @@ function RequestCard({ req, onAck, onResolve, spring }: {
         <span className="text-sm font-bold text-navy">Room {req.roomNumber}</span>
         <span className="ml-auto text-[11px] text-slate/40">{timeAgo(req.createdAt)}</span>
       </div>
+
+      {/* Patient + summary */}
       <p className="mt-1.5 text-sm font-semibold text-navy">{req.residentName}</p>
-      <p className="text-sm text-slate">{req.transcript || req.aiSummary || `${req.requestType} request`}</p>
-      {req.triageReason && <p className="mt-0.5 text-xs text-slate/50">{req.triageReason}</p>}
+      <p className="text-sm text-slate">{req.aiSummary || req.transcript || `${req.requestType} request`}</p>
+
+      {/* AI triage reason */}
+      {req.triageReason && (
+        <p className="mt-0.5 text-xs text-slate/50">{req.triageReason}</p>
+      )}
+
+      {/* Suggested action — prominent */}
+      {req.suggestedAction && (
+        <div className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber/8 px-2.5 py-1.5">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2.5" className="mt-0.5 shrink-0">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <p className="text-[11px] font-semibold text-amber">{req.suggestedAction}</p>
+        </div>
+      )}
+
+      {/* Assignment */}
       {req.assignedTherapist && (
         <p className="mt-1 text-xs font-medium text-[#1d4ed8]">Assigned · {req.assignedTherapist}</p>
       )}
+
+      {/* Action buttons */}
       <div className="mt-3 flex items-center gap-2">
         {req.status === "New" && (
           <button onClick={onAck}
@@ -516,8 +573,55 @@ function RequestCard({ req, onAck, onResolve, spring }: {
           className="rounded-lg border border-gray-muted px-3.5 py-1.5 text-xs font-semibold text-slate transition-colors hover:border-success/40 hover:bg-success/5 hover:text-success active:scale-95">
           Resolve
         </button>
-        <span className="ml-auto text-[11px] font-medium text-slate/50">{req.status}</span>
+        {/* AI Copilot button */}
+        <button onClick={loadCopilot}
+          className={`ml-auto flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+            copilotOpen
+              ? "border-[#7c3aed]/30 bg-[#7c3aed]/8 text-[#7c3aed]"
+              : "border-gray-muted text-slate/50 hover:border-[#7c3aed]/30 hover:bg-[#7c3aed]/5 hover:text-[#7c3aed]"
+          }`}>
+          {copilotLoading ? (
+            <span className="h-3 w-3 animate-spin rounded-full border border-[#7c3aed]/30 border-t-[#7c3aed]" />
+          ) : (
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm-1-5h2v2h-2zm0-8h2v6h-2z" />
+            </svg>
+          )}
+          {copilotLoading ? "Thinking…" : "Suggest reply"}
+        </button>
       </div>
+
+      {/* Copilot panel */}
+      {copilotOpen && (copilot || copilotLoading) && (
+        <div className="mt-2.5 rounded-xl border border-[#7c3aed]/15 bg-[#7c3aed]/5 p-3">
+          {copilotLoading && !copilot ? (
+            <p className="text-xs text-[#7c3aed]/60 animate-pulse">Generating suggested response…</p>
+          ) : (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-[#7c3aed]/60 mb-1.5">Suggested reply</p>
+              <p className="text-xs leading-relaxed text-navy">{copilot}</p>
+              <button onClick={copyResponse}
+                className="mt-2 flex items-center gap-1 rounded-md bg-[#7c3aed]/10 px-2.5 py-1 text-[11px] font-semibold text-[#7c3aed] hover:bg-[#7c3aed]/20 transition-colors">
+                {copied ? (
+                  <>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    Copy to clipboard
+                  </>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
