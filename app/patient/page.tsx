@@ -25,14 +25,13 @@ export default function PatientPage() {
   // Request flow: idle → sent (waiting for staff) → ack (acknowledged).
   const [flow, setFlow] = useState<"idle" | "sent" | "ack">("idle");
   const [ackBy, setAckBy] = useState<string | null>(null);
-  const [amp, setAmp] = useState(0); // 0..1 live voice amplitude
+  // Typed fallback for browsers without speech recognition (e.g. some iOS).
+  const [showTyping, setShowTyping] = useState(false);
+  const [typedDraft, setTypedDraft] = useState("");
+  const [sttError, setSttError] = useState("");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recRef = useRef<any>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const rafRef = useRef<number | null>(null);
   const transcriptRef = useRef("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
@@ -59,28 +58,12 @@ export default function PatientPage() {
   const ws = store.getWorkspace(facilityId);
   const room = ws.rooms.find((r) => r.id === roomId);
 
-  function stopMeter() {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close().catch(() => {});
-      audioCtxRef.current = null;
-    }
-    analyserRef.current = null;
-    setAmp(0);
-  }
-
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }
 
   function stopEverything() {
     if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
-    stopMeter();
     stopPolling();
   }
 
@@ -118,78 +101,75 @@ export default function PatientPage() {
     setAckBy(null);
   }
 
-  // Live microphone amplitude meter → drives the breathing animation.
-  async function startMeter() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
-      const ctx = new Ctx();
-      audioCtxRef.current = ctx;
-      const src = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      src.connect(analyser);
-      analyserRef.current = analyser;
-      const data = new Uint8Array(analyser.frequencyBinCount);
-
-      const tick = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteTimeDomainData(data);
-        // RMS around the 128 midpoint → 0..1
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) {
-          const v = (data[i] - 128) / 128;
-          sum += v * v;
-        }
-        const rms = Math.sqrt(sum / data.length);
-        // Smooth + boost so quiet speech still shows.
-        setAmp((prev) => prev * 0.6 + Math.min(1, rms * 3.2) * 0.4);
-        rafRef.current = requestAnimationFrame(tick);
-      };
-      tick();
-    } catch {
-      // Mic permission denied — animation just won't pulse; speech may still work.
-    }
-  }
-
   function startListening() {
     // Unlock text-to-speech inside this user gesture so the spoken nurse
     // confirmation can autoplay later without another tap.
     primeTTS();
     setTranscript("");
     transcriptRef.current = "";
-    setRecording(true);
-    startMeter();
+    setSttError("");
+    setTypedDraft("");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SRClass = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    if (SRClass) {
-      const rec: SR = new SRClass();
-      recRef.current = rec;
-      rec.lang = "en-US";
-      rec.interimResults = true;
-      rec.continuous = true;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rec.onresult = (e: any) => {
-        const t = Array.from(e.results as unknown[])
-          .map((r: unknown) => (r as SpeechRecognitionResult)[0].transcript)
-          .join(" ");
-        transcriptRef.current = t;
-        setTranscript(t);
-      };
-      rec.onerror = () => {};
-      try { rec.start(); } catch {}
+    if (!SRClass) {
+      // No speech recognition on this browser (common on iOS): typed fallback.
+      setRecording(true);
+      setShowTyping(true);
+      return;
+    }
+
+    setRecording(true);
+    setShowTyping(false);
+
+    // IMPORTANT: do NOT open a second microphone stream (getUserMedia) here.
+    // On phones a second mic capture steals audio from SpeechRecognition and
+    // you get an empty transcript. SpeechRecognition owns the mic alone.
+    const rec: SR = new SRClass();
+    recRef.current = rec;
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = false; // mobile-friendly: continuous is unreliable on iOS
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      const t = Array.from(e.results as unknown[])
+        .map((r: unknown) => (r as SpeechRecognitionResult)[0].transcript)
+        .join(" ");
+      transcriptRef.current = t;
+      setTranscript(t);
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onerror = (e: any) => {
+      const err = e?.error ?? "unknown";
+      // no-speech / aborted are benign; for real failures offer typing.
+      if (err !== "no-speech" && err !== "aborted") {
+        setSttError(err === "not-allowed" ? "Microphone permission was blocked." : `Voice error: ${err}`);
+        setShowTyping(true);
+      }
+    };
+    try {
+      rec.start();
+    } catch {
+      setSttError("Couldn't start the microphone.");
+      setShowTyping(true);
     }
   }
 
   function stopListening() {
     if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
-    stopMeter();
     setRecording(false);
+    setShowTyping(false);
     const finalText = transcriptRef.current.trim();
     sendRequest(finalText ? "Voice" : "Button", finalText);
+  }
+
+  function sendTyped() {
+    const text = typedDraft.trim();
+    if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
+    setRecording(false);
+    setShowTyping(false);
+    setTypedDraft("");
+    sendRequest(text ? "Typed" : "Button", text);
   }
 
   function toggleTalk() {
@@ -271,10 +251,9 @@ export default function PatientPage() {
   }
 
   // ── Home ───────────────────────────────────────────────────────────────────
-  // Animation scale: idle gentle pulse handled by CSS; while recording the ring
-  // grows/shrinks with live voice amplitude.
-  const ringScale = recording ? 1 + amp * 0.45 : 1;
-  const glowOpacity = recording ? 0.35 + amp * 0.5 : 0.25;
+  // Animation: a gentle CSS pulse (no live mic meter — a second mic stream
+  // breaks speech recognition on phones). Faster pulse while recording.
+  const glowOpacity = recording ? 0.4 : 0.25;
 
   return (
     <div className="relative flex min-h-screen flex-col select-none overflow-hidden" style={{ background: "#F5F1E8" }}>
@@ -328,7 +307,7 @@ export default function PatientPage() {
         ) : (
           <div className="flex flex-col items-center">
             <p className="mb-10 text-center text-lg font-medium text-slate/50">
-              {recording ? "I'm listening…" : "Tap the circle to talk to staff"}
+              {showTyping ? "Type your message to staff" : recording ? "I'm listening…" : "Tap the circle to talk to staff"}
             </p>
 
             {/* THE BIG TAP-TO-TALK CIRCLE */}
@@ -338,33 +317,28 @@ export default function PatientPage() {
               className="relative flex items-center justify-center"
               style={{ width: 300, height: 300 }}
             >
-              {/* Outer flowing glow rings */}
+              {/* Outer glow */}
               <span
-                className="absolute rounded-full transition-all duration-150 ease-out"
+                className={`absolute rounded-full ${recording ? "animate-[pulse_1.4s_ease-in-out_infinite]" : "animate-[pulse_2.6s_ease-in-out_infinite]"}`}
                 style={{
                   width: 300, height: 300,
                   background: "radial-gradient(circle, rgba(56,178,172,0.45) 0%, rgba(56,178,172,0) 70%)",
-                  transform: `scale(${ringScale + 0.15})`,
                   opacity: glowOpacity,
                 }}
               />
+              {/* Border ring */}
               <span
-                className={`absolute rounded-full border-2 transition-all duration-150 ease-out ${recording ? "" : "animate-[pulse_2.4s_ease-in-out_infinite]"}`}
-                style={{
-                  width: 260, height: 260,
-                  borderColor: "rgba(56,178,172,0.35)",
-                  transform: `scale(${ringScale})`,
-                }}
+                className={`absolute rounded-full border-2 ${recording ? "animate-[ping_1.6s_ease-in-out_infinite]" : "animate-[pulse_2.6s_ease-in-out_infinite]"}`}
+                style={{ width: 260, height: 260, borderColor: "rgba(56,178,172,0.35)" }}
               />
               {/* Core */}
               <span
-                className="relative flex items-center justify-center rounded-full text-white shadow-[0_12px_40px_rgba(56,178,172,0.45)] transition-all duration-150 ease-out"
+                className={`relative flex items-center justify-center rounded-full text-white shadow-[0_12px_40px_rgba(56,178,172,0.45)] ${recording ? "animate-[pulse_1.4s_ease-in-out_infinite]" : ""}`}
                 style={{
                   width: 220, height: 220,
                   background: recording
                     ? "radial-gradient(circle at 50% 40%, #4fd1c5, #319795)"
                     : "radial-gradient(circle at 50% 40%, #3fc0b8, #2c9c97)",
-                  transform: `scale(${recording ? 1 + amp * 0.12 : 1})`,
                 }}
               >
                 <span className="text-2xl font-bold tracking-tight">
@@ -374,16 +348,39 @@ export default function PatientPage() {
             </button>
 
             {/* Live transcript */}
-            <div className="mt-10 h-12 max-w-md text-center">
-              {recording && transcript && (
+            <div className="mt-8 min-h-12 max-w-md text-center">
+              {recording && !showTyping && transcript && (
                 <p className="text-lg text-slate/70">&ldquo;{transcript}&rdquo;</p>
               )}
-              {!recording && (
+              {!recording && !sttError && (
                 <p className="text-sm text-slate/40">
                   Tap once to start talking · tap again to send
                 </p>
               )}
+              {sttError && (
+                <p className="text-sm font-medium text-amber">{sttError} You can type instead below.</p>
+              )}
             </div>
+
+            {/* Typed fallback (no speech recognition / mic blocked) */}
+            {showTyping && (
+              <div className="mt-4 w-full max-w-md">
+                <textarea
+                  value={typedDraft}
+                  onChange={(e) => setTypedDraft(e.target.value)}
+                  autoFocus
+                  rows={2}
+                  placeholder="e.g. I need help / I need water"
+                  className="w-full rounded-2xl border border-teal/30 bg-white px-4 py-3 text-lg text-navy shadow-soft focus:outline-none focus:ring-2 focus:ring-teal/40"
+                />
+                <button
+                  onClick={sendTyped}
+                  className="mt-3 w-full rounded-2xl bg-teal py-4 text-lg font-bold text-white shadow-soft hover:bg-[#2c9c97]"
+                >
+                  Send to staff
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
