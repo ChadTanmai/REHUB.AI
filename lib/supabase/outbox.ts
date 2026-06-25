@@ -124,8 +124,8 @@ export async function flushOutbox(): Promise<{ sent: number; pending: number }> 
       item.lastTryAt = Date.now();
       let ok = false;
       try {
-        const id = await submitPatientRequest(item.payload);
-        ok = id !== null;
+        const res = await submitPatientRequest(item.payload);
+        ok = res.id !== null;
       } catch {
         ok = false;
       }

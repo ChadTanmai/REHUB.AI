@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { isActive } from "@/lib/requestUtils";
 import { URGENCY_META, type UrgencyLevel, type Request, type Status } from "@/lib/types";
 import {
-  fetchFacilityRequests,
+  fetchFacilityRequestsDiag,
   subscribeFacilityRequests,
   updateRequestStatus,
 } from "@/lib/supabase/requests";
@@ -64,6 +64,7 @@ export default function CommandCenterPage() {
   useStoreVersion();
 
   const [selectedRoom, setSelectedRoom] = useState<string | "all">("all");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const seenCritical = useRef<Set<string>>(new Set());
 
   const store = getStore();
@@ -79,8 +80,9 @@ export default function CommandCenterPage() {
   useEffect(() => {
     if (!facilityId) return;
     let active = true;
-    fetchFacilityRequests(facilityId).then((rows) => {
+    fetchFacilityRequestsDiag(facilityId).then(({ rows, error }) => {
       if (!active) return;
+      setLoadError(error);
       rows.forEach((r) => store.ingestRemoteRequest(facilityId, r));
     });
     const unsub = subscribeFacilityRequests(facilityId, (r) => {
@@ -147,6 +149,12 @@ export default function CommandCenterPage() {
   return (
     <>
       <AppNav facilityName={ws.facility.name} />
+      {loadError && (
+        <div className="flex items-center justify-center gap-2 bg-[#7f1d1d] px-4 py-2 text-center text-xs font-semibold text-white">
+          Can&apos;t load patient messages: {loadError}. Run the delivery test at{" "}
+          <a href="/diagnostics" className="underline">/diagnostics</a>.
+        </div>
+      )}
       {criticalCount > 0 && (
         <div className="flex items-center justify-center gap-2 bg-[#dc2626] px-4 py-2 text-sm font-bold text-white animate-pulse">
           <span className="h-2 w-2 rounded-full bg-white" />

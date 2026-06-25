@@ -53,7 +53,19 @@ function mapRow(r: any): RemoteRequest {
   };
 }
 
-/** Patient-side submit (works without an account). Returns the new id or null. */
+export interface SubmitResult {
+  id: string | null;
+  error: string | null;
+}
+
+/**
+ * Patient-side submit (works without an account). Returns the new id, or a
+ * human-readable error so callers/diagnostics see exactly why delivery failed
+ * instead of a silent null.
+ *
+ * A null id with a null error means the RPC ran but returned null — the facility
+ * code did not match any published facility (publish the facility first).
+ */
 export async function submitPatientRequest(p: {
   facilityCode: string;
   roomId: string;
@@ -66,7 +78,7 @@ export async function submitPatientRequest(p: {
   urgencyLevel: string;
   triageReason: string;
   suggestedAction: string;
-}): Promise<string | null> {
+}): Promise<SubmitResult> {
   try {
     const supabase = getAuthClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,15 +95,26 @@ export async function submitPatientRequest(p: {
       p_triage_reason: p.triageReason,
       p_suggested_action: p.suggestedAction,
     });
-    if (error) return null;
-    return (data as string) ?? null;
-  } catch {
-    return null;
+    if (error) {
+      return { id: null, error: `${error.code ?? ""} ${error.message ?? error}`.trim() };
+    }
+    const id = (data as string) ?? null;
+    return {
+      id,
+      error: id ? null : "RPC returned null — facility code not found in the cloud (publish the facility first).",
+    };
+  } catch (e) {
+    return { id: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
-/** Nurse-side: load recent requests for a facility. */
-export async function fetchFacilityRequests(facilityId: string): Promise<RemoteRequest[]> {
+export interface FetchResult {
+  rows: RemoteRequest[];
+  error: string | null;
+}
+
+/** Nurse-side: load recent requests for a facility, capturing any error. */
+export async function fetchFacilityRequestsDiag(facilityId: string): Promise<FetchResult> {
   try {
     const supabase = getAuthClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,12 +124,17 @@ export async function fetchFacilityRequests(facilityId: string): Promise<RemoteR
       .eq("facility_id", facilityId)
       .order("created_at", { ascending: false })
       .limit(200);
-    if (error || !data) return [];
+    if (error) return { rows: [], error: `${error.code ?? ""} ${error.message ?? error}`.trim() };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (data as any[]).map(mapRow);
-  } catch {
-    return [];
+    return { rows: ((data ?? []) as any[]).map(mapRow), error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Nurse-side: load recent requests for a facility. */
+export async function fetchFacilityRequests(facilityId: string): Promise<RemoteRequest[]> {
+  return (await fetchFacilityRequestsDiag(facilityId)).rows;
 }
 
 /** Nurse-side: subscribe to live inserts/updates. Returns an unsubscribe fn. */
