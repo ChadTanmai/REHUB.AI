@@ -35,13 +35,16 @@ export function speak(text: string): void {
   try {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.95;
-    u.pitch = 1;
+    // Warm, friendly delivery: a touch slower and a little higher pitched reads
+    // as caring rather than robotic — reassuring for an anxious patient.
+    u.rate = 0.9;
+    u.pitch = 1.15;
     u.volume = 1;
     u.lang = "en-US";
-    // Prefer a natural English voice when one is available.
+    // Prefer a warm, natural English voice when one is available.
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) => /en[-_]US/i.test(v.lang) && /female|samantha|google/i.test(v.name))
+    const preferred =
+      voices.find((v) => /en[-_]US/i.test(v.lang) && /samantha|ava|allison|karen|moira|google us english|female/i.test(v.name))
       ?? voices.find((v) => /en[-_]US/i.test(v.lang))
       ?? voices.find((v) => /^en/i.test(v.lang));
     if (preferred) u.voice = preferred;

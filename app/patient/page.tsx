@@ -126,7 +126,12 @@ export default function PatientPage() {
         const name = (info.acknowledgedBy ?? "").trim();
         setAckBy(name || null);
         setFlow("ack");
-        speak(name ? `${name} is on the way to help you.` : "Your care team is on the way to help you.");
+        const who = session!.patientName.split(" ")[0] || "there";
+        speak(
+          name
+            ? `Hi ${who}! Good news — ${name} got your message and is on the way to help you. Hang tight, you're in good hands.`
+            : `Hi ${who}! Good news — your care team got your message and is on the way to help you. Hang tight, you're in good hands.`,
+        );
       }
     };
     void check();
