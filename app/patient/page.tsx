@@ -10,6 +10,7 @@ import { openLiveBroadcaster } from "@/lib/supabase/liveChannel";
 import { classifyRequest } from "@/lib/aiClassifier";
 import { aiRoute, aiAsk, aiTriage } from "@/lib/ai/client";
 import { buildPatientMemory } from "@/lib/ai/memory";
+import SendConfirmation from "@/components/SendConfirmation";
 import { primeTTS, speak } from "@/lib/tts";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import type { UrgencyLevel } from "@/lib/types";
@@ -38,7 +39,8 @@ export default function PatientPage() {
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   // Request flow: idle → sent (waiting for staff) → ack (acknowledged).
-  const [flow, setFlow] = useState<"idle" | "sent" | "ack">("idle");
+  // idle → confirm (send animation) → idle · ack (nurse responded) · error (retrying)
+  const [flow, setFlow] = useState<"idle" | "confirm" | "ack" | "error">("idle");
   const [ackBy, setAckBy] = useState<string | null>(null);
   // Typed fallback for browsers without speech recognition (e.g. some iOS).
   const [showTyping, setShowTyping] = useState(false);
@@ -66,6 +68,7 @@ export default function PatientPage() {
   // a nurse taps acknowledge — no network round-trip). ackedRef makes it fire once.
   const ackUnsubRef = useRef<null | (() => void)>(null);
   const ackedRef = useRef(false);
+  const ackDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveRef = useRef<{ send: (p: import("@/lib/supabase/liveChannel").LiveSpeakingPayload) => void; close: () => void } | null>(null);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Live AI analysis: debounced Hubi triage on the partial transcript mid-speech.
@@ -105,6 +108,7 @@ export default function PatientPage() {
     if (voiceTimerRef.current) { clearTimeout(voiceTimerRef.current); voiceTimerRef.current = null; }
     if (liveAiTimerRef.current) { clearTimeout(liveAiTimerRef.current); liveAiTimerRef.current = null; }
     if (idleHelpRef.current) { clearTimeout(idleHelpRef.current); idleHelpRef.current = null; }
+    if (ackDismissRef.current) { clearTimeout(ackDismissRef.current); ackDismissRef.current = null; }
   }
 
   function pulseVoice() {
@@ -176,6 +180,9 @@ export default function PatientPage() {
         ? `Good news, ${who}. ${name} has your message and is on the way to help you. Hang tight — you're in good hands.`
         : `Good news, ${who}. Your care team has your message and is on the way to help you. Hang tight — you're in good hands.`,
     );
+    // Auto-return to the ready screen — the patient never has to press anything.
+    if (ackDismissRef.current) clearTimeout(ackDismissRef.current);
+    ackDismissRef.current = setTimeout(() => resetFlow(), 7000);
   }
 
   function isAckStatus(status?: string) {
@@ -218,6 +225,7 @@ export default function PatientPage() {
   function resetFlow() {
     stopPolling();
     stopAckWatch();
+    if (ackDismissRef.current) { clearTimeout(ackDismissRef.current); ackDismissRef.current = null; }
     ackedRef.current = false;
     setFlow("idle");
     setAckBy(null);
@@ -375,8 +383,21 @@ export default function PatientPage() {
   function sendRequest(source: "Button" | "Voice" | "Typed", text: string) {
     if (!room) return;
     setRoutedTo(null);
+    setAckBy(null);
+    setTranscript("");
+    transcriptRef.current = "";
     ackedRef.current = false;
-    const req = store.submitRequest({ facilityId, roomId, source, text: text || undefined });
+
+    let req;
+    try {
+      req = store.submitRequest({ facilityId, roomId, source, text: text || undefined });
+    } catch {
+      // Never pretend it sent — show the retry state and speak honestly.
+      setFlow("error");
+      void speak("I'm having trouble sending your request. I'll keep trying automatically.");
+      return;
+    }
+
     // Instant same-device acknowledgement (no network wait).
     watchLocalAck(req.id);
     void enqueueRequest(
@@ -395,10 +416,10 @@ export default function PatientPage() {
       },
       (remoteId) => startAckPolling(remoteId),
     );
-    setFlow("sent");
-    setAckBy(null);
-    setTranscript("");
-    transcriptRef.current = "";
+
+    // Single, continuous confirmation animation + spoken reassurance.
+    setFlow("confirm");
+    void speak("Your message has been sent. Your care team has it now.");
 
     // Smart routing: if patient mentioned a staff name, detect and surface it
     const therapistNames = ws.therapists.map((t) => t.name);
@@ -407,7 +428,6 @@ export default function PatientPage() {
         if (result?.staffName) setRoutedTo(result.staffName);
       }).catch(() => {});
     }
-
   }
 
   /** AI ask assistant — answers the patient without notifying nurses. */
@@ -534,7 +554,14 @@ export default function PatientPage() {
 
       {/* Main */}
       <main className="z-10 flex flex-1 flex-col items-center justify-center px-6">
-        {flow === "ack" ? (
+        {flow === "confirm" || flow === "error" ? (
+          // Single, continuous send confirmation (or retry state). Auto-returns
+          // to the Talk screen — no buttons, no Done.
+          <SendConfirmation
+            failed={flow === "error"}
+            onComplete={() => { if (!ackedRef.current) setFlow("idle"); }}
+          />
+        ) : flow === "ack" ? (
           <div className="flex flex-col items-center gap-5 text-center">
             <div className="flex h-28 w-28 items-center justify-center rounded-full" style={{ background: "rgba(34,197,94,0.18)" }}>
               <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2">
@@ -546,31 +573,6 @@ export default function PatientPage() {
               {ackBy ? `${ackBy} is on the way` : "Your care team is on the way"}
             </p>
             <p className="text-lg text-slate/60">Someone is coming to assist you now.</p>
-            <button onClick={resetFlow}
-              className="mt-2 rounded-2xl bg-navy px-7 py-3 text-base font-semibold text-white hover:bg-[#0c2030]">
-              Done
-            </button>
-          </div>
-        ) : flow === "sent" ? (
-          <div className="flex flex-col items-center gap-5 text-center">
-            <div className="flex h-28 w-28 items-center justify-center rounded-full" style={{ background: "rgba(56,178,172,0.15)" }}>
-              <span className="h-12 w-12 animate-spin rounded-full border-4 border-teal/30 border-t-teal" />
-            </div>
-            <p className="text-3xl font-bold text-navy">Help is on the way</p>
-            <p className="text-lg text-slate/60">Your care team has been notified.</p>
-            {routedTo && (
-              <div className="flex items-center gap-2 rounded-full bg-[#1d4ed8]/10 px-4 py-1.5">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2">
-                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span className="text-sm font-semibold text-[#1d4ed8]">Directed to {routedTo}</span>
-              </div>
-            )}
-            <p className="text-lg text-slate/50">Waiting for staff to respond…</p>
-            <button onClick={resetFlow}
-              className="mt-2 rounded-2xl border border-slate/20 bg-white/60 px-7 py-3 text-base font-semibold text-slate hover:bg-white">
-              Done
-            </button>
           </div>
         ) : (
           <div className="flex flex-col items-center">
