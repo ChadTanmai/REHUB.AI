@@ -458,6 +458,8 @@ export default function PatientPage() {
 
   function handleLeave() {
     stopEverything();
+    // Free the room so it shows Available again and can be re-joined.
+    store.vacateRoom(facilityId, roomId);
     clearPatientSession();
     router.replace("/join");
   }

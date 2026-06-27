@@ -648,6 +648,26 @@ class RehubStore {
     return room;
   }
 
+  /**
+   * Release a patient from a room (on patient logout). Decrements patientCount
+   * and frees the room back to Available so it can be joined again, and restores
+   * the room's display name (it was set to the patient's name on assign).
+   */
+  vacateRoom(facilityId: string, roomId: string): Room | null {
+    const ws = this.ensureFacility(facilityId);
+    const room = ws.rooms.find((r) => r.id === roomId);
+    if (!room) return null;
+    const count = Math.max(0, (room.patientCount ?? 0) - 1);
+    const cap = room.capacity ?? 1;
+    room.patientCount = count;
+    room.roomStatus = count <= 0 ? "Available" : count >= cap ? "Occupied" : "Partially Occupied";
+    if (count <= 0) room.displayName = room.name || `Room ${room.roomNumber}`;
+    this.persist(facilityId);
+    this.emit();
+    dbUpsertRoom(room).catch(() => {});
+    return room;
+  }
+
   addTherapist(
     facilityId: string,
     input: Omit<Therapist, "id" | "facilityId" | "active">,
