@@ -10,6 +10,11 @@
  * Defaults to a warm female voice ("Sarah") and the cheap, fast Flash model so
  * it sits comfortably in the free tier. Override with ELEVENLABS_VOICE_ID /
  * ELEVENLABS_MODEL_ID.
+ *
+ * KILL SWITCH: even with a key present, ElevenLabs stays OFF unless
+ * ELEVENLABS_ENABLED is explicitly "true". This protects the free-tier
+ * character budget — flip it on only for live facility demos, off afterward.
+ * When off, the client transparently uses the free browser voice.
  */
 
 export const runtime = "nodejs";
@@ -20,7 +25,10 @@ const MODEL_ID = process.env.ELEVENLABS_MODEL_ID ?? "eleven_flash_v2_5";   // fa
 
 export async function POST(req: Request) {
   const key = process.env.ELEVENLABS_API_KEY;
-  if (!key) return Response.json({ available: false });
+  const enabled = process.env.ELEVENLABS_ENABLED === "true";
+  // No key, or the kill switch is off → report unavailable so the client falls
+  // back to the free browser voice and we spend zero ElevenLabs characters.
+  if (!key || !enabled) return Response.json({ available: false });
 
   let text = "";
   try {
