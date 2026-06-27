@@ -15,6 +15,7 @@ import {
 } from "@/lib/supabase/requests";
 import { aiHandoff } from "@/lib/ai/client";
 import HubiConsole from "@/components/HubiConsole";
+import { openShiftReportPdf } from "@/lib/shiftReport";
 
 function urgencyOf(r: Request): UrgencyLevel {
   return r.urgencyLevel ?? (r.priority === "Urgent" ? "High" : r.priority === "Important" ? "Medium" : "Low");
@@ -140,8 +141,16 @@ export default function CommandCenterPage() {
     }));
     const res = await aiHandoff(ws.facility.name, rows);
     setReportLoading(false);
-    if (!res) { setReportUnavailable(true); return; }
-    setReport(res.report);
+    // Analytics + layout come from real data; the AI narrative is the prose
+    // section. If AI is unavailable, still produce the PDF with a deterministic
+    // summary so leadership always gets a report.
+    const narrative = res?.report
+      ?? `Auto-generated summary (AI narrative unavailable): ${ws.requests.length} request(s) logged this shift across ${new Set(ws.requests.map((r) => r.roomNumber)).size} room(s). Review the critical section and full rundown below.`;
+    const opened = openShiftReportPdf(ws.facility.name, ws.requests, narrative);
+    if (!opened) {
+      // Popup blocked — fall back to the in-app text modal.
+      setReport(narrative);
+    }
   }
 
   return (

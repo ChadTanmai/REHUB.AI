@@ -55,6 +55,9 @@ export default function PatientPage() {
   const [askLoading, setAskLoading] = useState(false);
   // Pulses true briefly each time new speech arrives → drives the live animation.
   const [voiceActive, setVoiceActive] = useState(false);
+  // Voice-first accessibility: spoken welcome before any reading is required.
+  const [greeted, setGreeted] = useState(false);
+  const idleHelpRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recRef = useRef<any>(null);
@@ -62,6 +65,10 @@ export default function PatientPage() {
   const askModeRef = useRef(false); // ref so stopListening() can read it synchronously
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
+  // Instant acknowledgement: watch the shared store directly (fires the moment
+  // a nurse taps acknowledge — no network round-trip). ackedRef makes it fire once.
+  const ackUnsubRef = useRef<null | (() => void)>(null);
+  const ackedRef = useRef(false);
   const liveRef = useRef<{ send: (p: import("@/lib/supabase/liveChannel").LiveSpeakingPayload) => void; close: () => void } | null>(null);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Live AI analysis: debounced Hubi triage on the partial transcript mid-speech.
@@ -85,6 +92,10 @@ export default function PatientPage() {
   const ws = store.getWorkspace(facilityId);
   const room = ws.rooms.find((r) => r.id === roomId);
 
+  function stopAckWatch() {
+    if (ackUnsubRef.current) { ackUnsubRef.current(); ackUnsubRef.current = null; }
+  }
+
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }
@@ -92,9 +103,11 @@ export default function PatientPage() {
   function stopEverything() {
     if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
     stopPolling();
+    stopAckWatch();
     closeLive(false);
     if (voiceTimerRef.current) { clearTimeout(voiceTimerRef.current); voiceTimerRef.current = null; }
     if (liveAiTimerRef.current) { clearTimeout(liveAiTimerRef.current); liveAiTimerRef.current = null; }
+    if (idleHelpRef.current) { clearTimeout(idleHelpRef.current); idleHelpRef.current = null; }
   }
 
   function pulseVoice() {
@@ -149,8 +162,46 @@ export default function PatientPage() {
   }
 
   /**
-   * Poll the cloud for this request's status until a nurse acknowledges (or a
-   * timeout). When acknowledged, show + SPEAK the confirmation with the staff name.
+   * Fire the acknowledged state exactly once, from whichever path sees it first
+   * (instant local store watcher OR cloud poll). Shows + SPEAKS the confirmation.
+   */
+  function fireAck(name: string | null) {
+    if (ackedRef.current) return;
+    ackedRef.current = true;
+    stopPolling();
+    stopAckWatch();
+    setAckBy(name);
+    setFlow("ack");
+    const who = session!.patientName.split(" ")[0] || "there";
+    // Natural AI voice (ElevenLabs) with Web Speech fallback
+    void speak(
+      name
+        ? `Good news, ${who}. ${name} has your message and is on the way to help you. Hang tight — you're in good hands.`
+        : `Good news, ${who}. Your care team has your message and is on the way to help you. Hang tight — you're in good hands.`,
+    );
+  }
+
+  function isAckStatus(status?: string) {
+    return status === "Acknowledged" || status === "In Progress" || status === "Resolved";
+  }
+
+  /**
+   * INSTANT acknowledgement on the same device: subscribe to the shared store and
+   * react the moment the nurse acts — no polling delay. (Demo + single-device.)
+   */
+  function watchLocalAck(localId: string) {
+    stopAckWatch();
+    const check = () => {
+      const r = store.getWorkspace(facilityId).requests.find((x) => x.id === localId);
+      if (r && isAckStatus(r.status)) fireAck((r.acknowledgedBy ?? "").trim() || null);
+    };
+    check();
+    ackUnsubRef.current = store.subscribe(check);
+  }
+
+  /**
+   * Cross-device fallback: poll the cloud for this request's status. Fast cadence
+   * so a nurse on another device still confirms within ~1 second.
    */
   function startAckPolling(messageId: string) {
     stopPolling();
@@ -161,26 +212,16 @@ export default function PatientPage() {
         if (Date.now() - pollStartRef.current > 180_000) stopPolling();
         return;
       }
-      if (info.status === "Acknowledged" || info.status === "In Progress" || info.status === "Resolved") {
-        stopPolling();
-        const name = (info.acknowledgedBy ?? "").trim();
-        setAckBy(name || null);
-        setFlow("ack");
-        const who = session!.patientName.split(" ")[0] || "there";
-        // Natural AI voice (ElevenLabs) with Web Speech fallback
-        void speak(
-          name
-            ? `Hi ${who}! Good news — ${name} got your message and is on the way to help you. Hang tight, you're in good hands.`
-            : `Hi ${who}! Good news — your care team got your message and is on the way to help you. Hang tight, you're in good hands.`,
-        );
-      }
+      if (isAckStatus(info.status)) fireAck((info.acknowledgedBy ?? "").trim() || null);
     };
     void check();
-    pollRef.current = setInterval(check, 3000);
+    pollRef.current = setInterval(check, 1000);
   }
 
   function resetFlow() {
     stopPolling();
+    stopAckWatch();
+    ackedRef.current = false;
     setFlow("idle");
     setAckBy(null);
     setClarify(null);
@@ -282,8 +323,38 @@ export default function PatientPage() {
     sendRequest(text ? "Typed" : "Button", text);
   }
 
+  /** First tap on the welcome overlay: unlock audio + speak spoken guidance. */
+  function beginVoiceGuide() {
+    primeTTS();
+    setGreeted(true);
+    const who = session!.patientName.split(" ")[0] || "there";
+    const room = session!.roomNumber ? ` You are in Room ${session!.roomNumber}.` : "";
+    void speak(
+      `Hello ${who}, I'm Hubi, your care assistant.${room} You don't need to read or type anything. ` +
+      `Whenever you need help, tap the large green circle and just tell me what you need — like "I need water" or "I need my nurse."`,
+    );
+    // Gentle, one-time idle reminder if they don't act.
+    if (idleHelpRef.current) clearTimeout(idleHelpRef.current);
+    idleHelpRef.current = setTimeout(() => {
+      if (flow === "idle" && !recording) {
+        void speak("Whenever you're ready, tap the large green circle and tell me what you need.");
+      }
+    }, 22000);
+  }
+
+  /** Patient can re-hear the guidance anytime. */
+  function replayGuide() {
+    primeTTS();
+    void speak("To reach your care team, tap the large green circle and tell me what you need. I'm always here to help.");
+  }
+
+  function clearIdleHelp() {
+    if (idleHelpRef.current) { clearTimeout(idleHelpRef.current); idleHelpRef.current = null; }
+  }
+
   function toggleTalk() {
     if (flow !== "idle") return;
+    clearIdleHelp();
     if (recording) {
       stopListening();
     } else {
@@ -309,7 +380,10 @@ export default function PatientPage() {
   function sendRequest(source: "Button" | "Voice" | "Typed", text: string) {
     if (!room) return;
     setRoutedTo(null);
+    ackedRef.current = false;
     const req = store.submitRequest({ facilityId, roomId, source, text: text || undefined });
+    // Instant same-device acknowledgement (no network wait).
+    watchLocalAck(req.id);
     void enqueueRequest(
       {
         facilityCode: session!.facilityCode,
@@ -431,19 +505,51 @@ export default function PatientPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col select-none overflow-hidden" style={{ background: "#F5F1E8" }}>
+      {/* Voice-first welcome — one tap unlocks spoken guidance (no reading needed). */}
+      {!greeted && (
+        <button
+          onClick={beginVoiceGuide}
+          aria-label="Tap to begin and hear Hubi"
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-8 px-8 text-center"
+          style={{ background: "#F5F1E8" }}
+        >
+          <span className="flex h-32 w-32 items-center justify-center rounded-full bg-teal/15">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#2c9c97" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" />
+            </svg>
+          </span>
+          <div>
+            <p className="text-4xl font-extrabold tracking-tight text-navy">Tap anywhere<br />to begin</p>
+            <p className="mt-4 text-xl font-medium text-slate/60">Hubi will talk you through everything.</p>
+          </div>
+          <span className="mt-2 inline-flex items-center gap-2 rounded-full bg-teal px-7 py-4 text-xl font-bold text-white shadow-[0_12px_40px_rgba(56,178,172,0.4)]">
+            Start
+          </span>
+        </button>
+      )}
+
       {/* Top bar */}
       <header className="z-10 flex items-center justify-between px-5 pt-6">
         <div>
           <p className="text-sm font-medium text-slate/50">Room {session.roomNumber}</p>
           <p className="text-lg font-bold text-navy">Hello, {firstName}</p>
         </div>
-        <button onClick={() => setView("settings")}
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-slate shadow-soft hover:bg-white">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={replayGuide} aria-label="Hear help again"
+            className="flex h-11 items-center gap-2 rounded-full bg-white/70 px-4 text-slate shadow-soft hover:bg-white">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" />
+            </svg>
+            <span className="text-sm font-semibold">Hear help</span>
+          </button>
+          <button onClick={() => setView("settings")} aria-label="Settings"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-slate shadow-soft hover:bg-white">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* Main */}
