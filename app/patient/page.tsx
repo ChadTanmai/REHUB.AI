@@ -8,7 +8,7 @@ import { enqueueRequest, ensureAutoFlush } from "@/lib/supabase/outbox";
 import { getRequestStatus } from "@/lib/supabase/requests";
 import { openLiveBroadcaster } from "@/lib/supabase/liveChannel";
 import { classifyRequest } from "@/lib/aiClassifier";
-import { aiConverse, aiRoute, aiAsk, aiTriage } from "@/lib/ai/client";
+import { aiRoute, aiAsk, aiTriage } from "@/lib/ai/client";
 import { buildPatientMemory } from "@/lib/ai/memory";
 import { primeTTS, speak } from "@/lib/tts";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
@@ -44,9 +44,6 @@ export default function PatientPage() {
   const [showTyping, setShowTyping] = useState(false);
   const [typedDraft, setTypedDraft] = useState("");
   const [sttError, setSttError] = useState("");
-  // Optional AI clarifying question shown after a non-urgent request.
-  const [clarify, setClarify] = useState<string | null>(null);
-  const [clarifyDraft, setClarifyDraft] = useState("");
   // Smart routing: staff member the patient addressed by name.
   const [routedTo, setRoutedTo] = useState<string | null>(null);
   // AI ask assistant — patient can ask questions without notifying nurses.
@@ -224,8 +221,6 @@ export default function PatientPage() {
     ackedRef.current = false;
     setFlow("idle");
     setAckBy(null);
-    setClarify(null);
-    setClarifyDraft("");
     setRoutedTo(null);
     setAskAnswer(null);
   }
@@ -402,8 +397,6 @@ export default function PatientPage() {
     );
     setFlow("sent");
     setAckBy(null);
-    setClarify(null);
-    setClarifyDraft("");
     setTranscript("");
     transcriptRef.current = "";
 
@@ -415,12 +408,6 @@ export default function PatientPage() {
       }).catch(() => {});
     }
 
-    // Patient conversation: AI clarifying question for non-urgent requests
-    if (text && (req.urgencyLevel ?? "Medium") !== "Critical") {
-      aiConverse(text).then((c) => {
-        if (c && !c.done && c.reply) setClarify(c.reply);
-      });
-    }
   }
 
   /** AI ask assistant — answers the patient without notifying nurses. */
@@ -447,13 +434,6 @@ export default function PatientPage() {
     } else {
       setAskAnswer("I'm sorry, I wasn't able to get an answer. Please ask your nurse.");
     }
-  }
-
-  function sendClarify() {
-    const detail = clarifyDraft.trim();
-    setClarify(null);
-    setClarifyDraft("");
-    if (detail) sendRequest("Typed", detail);
   }
 
   function handleLeave() {
@@ -586,30 +566,7 @@ export default function PatientPage() {
                 <span className="text-sm font-semibold text-[#1d4ed8]">Directed to {routedTo}</span>
               </div>
             )}
-            {clarify ? (
-              <div className="mt-2 w-full max-w-md rounded-2xl border border-teal/30 bg-white/70 p-4 text-left shadow-soft">
-                <p className="text-base font-medium text-navy">{clarify}</p>
-                <textarea
-                  value={clarifyDraft}
-                  onChange={(e) => setClarifyDraft(e.target.value)}
-                  rows={2}
-                  placeholder="Optional — tap to add detail"
-                  className="mt-2 w-full rounded-xl border border-gray-muted bg-white px-3 py-2 text-base text-navy focus:outline-none focus:ring-2 focus:ring-teal/40"
-                />
-                <div className="mt-2 flex gap-2">
-                  <button onClick={sendClarify}
-                    className="flex-1 rounded-xl bg-teal py-2.5 text-sm font-bold text-white hover:bg-[#2c9c97]">
-                    Send detail
-                  </button>
-                  <button onClick={() => setClarify(null)}
-                    className="rounded-xl border border-gray-muted px-4 py-2.5 text-sm font-semibold text-slate hover:bg-offwhite">
-                    Skip
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-slate/40">Waiting for staff to respond…</p>
-            )}
+            <p className="text-lg text-slate/50">Waiting for staff to respond…</p>
             <button onClick={resetFlow}
               className="mt-2 rounded-2xl border border-slate/20 bg-white/60 px-7 py-3 text-base font-semibold text-slate hover:bg-white">
               Done
