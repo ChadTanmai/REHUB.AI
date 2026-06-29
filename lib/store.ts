@@ -45,6 +45,8 @@ import {
   dbInsertEvent,
 } from "./db";
 import { pushSnapshot } from "./networkSync";
+import { SUPABASE_ENABLED } from "./supabase";
+import { upsertFacilityFromStore, upsertRoom } from "./supabase/facilities";
 
 const STORAGE_PREFIX = "rehub:facility:";
 const DEMO_PREFIX = "rehub:demo:";          // demo facilities use a separate key
@@ -506,6 +508,34 @@ class RehubStore {
     return facility;
   }
 
+  /**
+   * Auto-publish a facility (and optionally a room) to the cloud using the
+   * owner-aware path so RLS accepts it and patients on any device can join.
+   * Fire-and-forget and fully guarded — never blocks or throws into callers.
+   * No-ops cleanly when Supabase isn't configured or the user isn't signed in.
+   */
+  private cloudPublish(facilityId: string, room?: Room): void {
+    if (!SUPABASE_ENABLED) return;
+    const ws = this.workspaces.get(facilityId);
+    if (!ws) return;
+    const fac = ws.facility;
+    try {
+      upsertFacilityFromStore({ id: fac.id, name: fac.name, facilityCode: fac.facilityCode, teamName: fac.teamName })
+        .then((res) => {
+          if (res.ok && room) {
+            upsertRoom({
+              id: room.id,
+              facilityId,
+              roomNumber: room.roomNumber,
+              displayName: room.displayName,
+              active: room.active !== false,
+            }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    } catch { /* ignore — local store is the source of truth */ }
+  }
+
   createFacility(input: {
     name: string;
     facilityCode: string;
@@ -543,8 +573,9 @@ class RehubStore {
     });
     this.persist(facility.id);
     this.emit();
-    // Fire-and-forget: persist to Supabase when configured.
+    // Auto-publish to the cloud so the facility is joinable from any device.
     dbCreateFacility(facility).catch(() => {});
+    this.cloudPublish(facility.id);
     return facility;
   }
 
@@ -577,6 +608,8 @@ class RehubStore {
       if (input.description !== undefined) existing.description = sanitizeField(input.description, 200);
       this.persist(facilityId);
       this.emit();
+      dbUpsertRoom(existing).catch(() => {});
+      this.cloudPublish(facilityId, existing);
       return existing;
     }
     const room: Room = {
@@ -601,6 +634,7 @@ class RehubStore {
     this.persist(facilityId);
     this.emit();
     dbUpsertRoom(room).catch(() => {});
+    this.cloudPublish(facilityId, room);
     return room;
   }
 
