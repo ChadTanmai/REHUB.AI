@@ -34,6 +34,30 @@ function esc(s: unknown): string {
   return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
 }
 
+/** Render the AI's light markdown (## headings, **bold**, - bullets, ---) into
+ *  clean, styled HTML so no raw symbols leak into the report. */
+function renderNarrative(md: string): string {
+  const inline = (s: string) =>
+    esc(s)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*]+?)\*/g, "$1<em>$2</em>");
+  const lines = String(md ?? "").split(/\r?\n/);
+  let html = "";
+  let inList = false;
+  const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { closeList(); continue; }
+    if (/^-{3,}$/.test(line)) { closeList(); html += '<hr class="nhr">'; continue; }
+    if (/^#{1,6}\s/.test(line)) { closeList(); html += `<p class="nh">${inline(line.replace(/^#{1,6}\s/, ""))}</p>`; continue; }
+    if (/^[-*]\s/.test(line)) { if (!inList) { html += '<ul class="nul">'; inList = true; } html += `<li>${inline(line.replace(/^[-*]\s+/, ""))}</li>`; continue; }
+    closeList();
+    html += `<p class="np">${inline(line)}</p>`;
+  }
+  closeList();
+  return html || '<p class="np">No narrative available.</p>';
+}
+
 export function openShiftReportPdf(facilityName: string, requests: Request[], aiNarrative: string) {
   const now = new Date();
   const generated = now.toLocaleString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -121,21 +145,22 @@ export function openShiftReportPdf(facilityName: string, requests: Request[], ai
     </tr>`;
   }).join("");
 
-  const narrativeHtml = esc(aiNarrative).replace(/\n/g, "<br>");
+  const narrativeHtml = renderNarrative(aiNarrative);
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ReHub Shift Report — ${esc(facilityName)}</title>
 <style>
   :root{--navy:#102a43;--teal:#2f9e9e;--mint:#d9f0e5;--offwhite:#f7f4ef;--slate:#334e68;--muted:#d9e2ec;--coral:#d95d4f;--amber:#f0b429;--success:#2f855a;--soft:#62748a;}
   *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  body{margin:0;font-family:-apple-system,"SF Pro Display","Helvetica Neue",Arial,sans-serif;color:#1c2b3a;font-size:11pt;line-height:1.5;}
+  html,body{margin:0;background:#ffffff;color:#1c2b3a;}
+  body{font-family:-apple-system,"SF Pro Display","Helvetica Neue",Arial,sans-serif;font-size:11pt;line-height:1.5;}
   @page{size:Letter;margin:0.5in 0.55in;}
-  .wrap{max-width:7.4in;margin:0 auto;}
+  .wrap{max-width:7.4in;margin:0 auto;padding:24px 24px 40px;}
   .head{background:var(--navy);color:#fff;border-radius:14px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;}
   .mark{display:flex;align-items:center;gap:10px;}
   .glyph{width:30px;height:30px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;}
   .wm{font-size:15pt;font-weight:800;letter-spacing:-0.02em;}.wm b{color:#7fd6d6;}
-  .head .ttl{font-size:9pt;color:#9fb6cc;text-align:right;}
-  .head .ttl b{display:block;color:#fff;font-size:12pt;letter-spacing:0.01em;}
+  .head .ttl{font-size:9pt;color:#9fb6cc;text-align:right;padding-left:14px;}
+  .head .ttl b{display:block;color:#fff;font-size:12pt;letter-spacing:0.01em;white-space:nowrap;}
   h2.sec{font-size:13pt;color:var(--navy);margin:26px 0 12px;display:flex;align-items:center;gap:8px;}
   h2.sec::before{content:"";width:4px;height:16px;border-radius:2px;background:var(--teal);}
   h2.sec.crit::before{background:var(--coral);}
@@ -169,15 +194,23 @@ export function openShiftReportPdf(facilityName: string, requests: Request[], ai
   table.run td.msg{color:#1c2b3a;max-width:2in;}
   table.run .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;}
   table.run .wait{color:var(--coral);font-weight:700;}
-  .narr{border-left:4px solid var(--teal);background:var(--mint);border-radius:0 12px 12px 0;padding:14px 18px;font-size:10pt;color:#1c2b3a;line-height:1.6;}
+  /* Narrative — clean white card with a subtle teal accent (no heavy fill). */
+  .narr{border:1px solid var(--muted);border-left:3px solid var(--teal);background:#fbfdfc;border-radius:8px;padding:14px 20px;}
+  .narr .nh{font-weight:800;color:var(--navy);font-size:10.5pt;margin:12px 0 5px;}
+  .narr .nh:first-child{margin-top:0;}
+  .narr .np{margin:0 0 8px;color:#1c2b3a;font-size:10pt;line-height:1.55;}
+  .narr .nul{margin:4px 0 10px;padding-left:18px;}
+  .narr .nul li{margin-bottom:4px;color:var(--slate);font-size:10pt;line-height:1.5;}
+  .narr .nhr{border:none;border-top:1px solid var(--muted);margin:12px 0;}
   .foot{margin-top:26px;border-top:1px solid var(--muted);padding-top:10px;font-size:7.6pt;color:#9fb0c0;display:flex;justify-content:space-between;}
-  @media print{.noprint{display:none!important;}}
-  .noprint{position:fixed;top:14px;right:14px;display:flex;gap:8px;}
-  .btn{font-family:inherit;font-size:11pt;font-weight:700;border:none;border-radius:10px;padding:10px 18px;cursor:pointer;}
+  /* Toolbar sits in normal flow (sticky) so it never overlaps the report. */
+  .toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;background:#fff;border-bottom:1px solid var(--muted);}
+  .btn{font-family:inherit;font-size:11pt;font-weight:700;border:none;border-radius:10px;padding:9px 18px;cursor:pointer;}
   .btn-p{background:var(--navy);color:#fff;} .btn-s{background:#fff;color:var(--navy);border:1px solid var(--muted);}
+  @media print{.toolbar{display:none!important;} .wrap{padding:0;}}
 </style></head>
 <body>
-  <div class="noprint">
+  <div class="toolbar">
     <button class="btn btn-p" onclick="window.print()">Save as PDF</button>
     <button class="btn btn-s" onclick="window.close()">Close</button>
   </div>
@@ -213,7 +246,7 @@ export function openShiftReportPdf(facilityName: string, requests: Request[], ai
     </div>
 
     <h2 class="sec">Hubi shift narrative</h2>
-    <div class="narr">${narrativeHtml || "No narrative available."}</div>
+    <div class="narr">${narrativeHtml}</div>
 
     <h2 class="sec">Full request rundown</h2>
     <table class="run">
