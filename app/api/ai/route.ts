@@ -31,7 +31,11 @@ function getProvider(): Provider {
   return "none";
 }
 
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
+// Default to Haiku 4.5 — Anthropic's cheapest model. Override with ANTHROPIC_MODEL.
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
+// The `effort` parameter is supported on Opus/Fable and Sonnet 4.6 — but NOT on
+// Haiku 4.5 or Sonnet 4.5 (they 400). Gate it so any model works.
+const SUPPORTS_EFFORT = /opus|fable/i.test(ANTHROPIC_MODEL) || /sonnet-4-6/i.test(ANTHROPIC_MODEL);
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free";
 
 export function modelFor(p: Provider): string {
@@ -78,15 +82,16 @@ async function complete(
 ): Promise<string> {
   if (provider === "anthropic") {
     const a = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-    const resp = await a.messages.create({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const params: any = {
       model: ANTHROPIC_MODEL,
       max_tokens: opts.maxTokens,
       thinking: { type: "disabled" },
-      output_config: { effort: opts.effort ?? "low" },
       system: opts.system,
       messages: [{ role: "user", content: opts.user }],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    };
+    if (SUPPORTS_EFFORT) params.output_config = { effort: opts.effort ?? "low" };
+    const resp = await a.messages.create(params);
     return firstText(resp).trim();
   }
   return (await orChat(opts.system, opts.user, opts.maxTokens, opts.json ?? false)).trim();
@@ -135,10 +140,14 @@ async function runTriage(provider: Provider, body: Record<string, unknown>) {
 
   if (provider === "anthropic") {
     const a = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+    // Structured output (format) is supported on Haiku 4.5; only `effort` is not.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const outputConfig: any = { format: { type: "json_schema", schema: TRIAGE_SCHEMA as never } };
+    if (SUPPORTS_EFFORT) outputConfig.effort = "low";
     const resp = await a.messages.create({
       model: ANTHROPIC_MODEL, max_tokens: 400,
       thinking: { type: "disabled" },
-      output_config: { effort: "low", format: { type: "json_schema", schema: TRIAGE_SCHEMA as never } },
+      output_config: outputConfig,
       system, messages: [{ role: "user", content: userMsg }],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
