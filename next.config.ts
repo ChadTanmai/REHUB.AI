@@ -44,6 +44,8 @@ const securityHeaders = [
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
+      // Clickjacking defense in depth (pairs with X-Frame-Options: DENY)
+      "frame-ancestors 'none'",
       // Upgrade HTTP to HTTPS
       ...(PROD ? ["upgrade-insecure-requests"] : []),
     ].join("; "),
