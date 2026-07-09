@@ -3,10 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import AuthCard from "@/components/auth/AuthCard";
+import Turnstile, { turnstileEnabled } from "@/components/auth/Turnstile";
 import { getAuthClient } from "@/lib/auth/supabase-browser";
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -20,6 +22,7 @@ export default function ResetPasswordPage() {
       email.trim().toLowerCase(),
       {
         redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
+        ...(captchaToken ? { captchaToken } : {}),
       },
     );
 
@@ -71,9 +74,11 @@ export default function ResetPasswordPage() {
           <p className="rounded-lg bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p>
         )}
 
+        <Turnstile onToken={setCaptchaToken} />
+
         <button
           type="submit"
-          disabled={loading || !email}
+          disabled={loading || !email || (turnstileEnabled && !captchaToken)}
           className="w-full rounded-lg bg-navy py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0c2030] disabled:opacity-40"
         >
           {loading ? "Sending…" : "Send reset link"}

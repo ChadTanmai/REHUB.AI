@@ -28,8 +28,8 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      // Scripts: self + Vercel analytics inline scripts
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live",
+      // Scripts: self + Vercel analytics inline scripts + Cloudflare Turnstile
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://challenges.cloudflare.com",
       // Styles: self + inline (Tailwind) + Google Fonts
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       // Fonts
@@ -46,6 +46,8 @@ const securityHeaders = [
       "form-action 'self'",
       // Clickjacking defense in depth (pairs with X-Frame-Options: DENY)
       "frame-ancestors 'none'",
+      // Allow the Cloudflare Turnstile challenge iframe (bot protection)
+      "frame-src https://challenges.cloudflare.com",
       // Upgrade HTTP to HTTPS
       ...(PROD ? ["upgrade-insecure-requests"] : []),
     ].join("; "),

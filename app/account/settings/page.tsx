@@ -6,6 +6,7 @@ import AppNav from "@/components/AppNav";
 import { SiteFooter } from "@/components/SiteNav";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getAuthClient } from "@/lib/auth/supabase-browser";
+import MfaSetup from "@/components/account/MfaSetup";
 
 type Theme = "light" | "dark" | "system";
 
@@ -145,6 +146,11 @@ export default function SettingsPage() {
                 {pwMsg}
               </p>
             )}
+
+            <div className="mt-6 border-t border-gray-muted pt-5">
+              <p className="mb-2 text-sm font-semibold text-navy">Two-factor authentication</p>
+              <MfaSetup />
+            </div>
           </Section>
 
           <Section title="Account" desc="Sign out or manage your session.">

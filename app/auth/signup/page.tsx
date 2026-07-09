@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import AuthCard from "@/components/auth/AuthCard";
 import GoogleButton from "@/components/auth/GoogleButton";
+import Turnstile, { turnstileEnabled } from "@/components/auth/Turnstile";
 import { getAuthClient } from "@/lib/auth/supabase-browser";
 
 function SignUpForm() {
@@ -16,6 +17,7 @@ function SignUpForm() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [facilityName, setFacilityName] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
@@ -39,6 +41,7 @@ function SignUpForm() {
           facility_name: facilityName.trim(),
           role: "facility_director",
         },
+        ...(captchaToken ? { captchaToken } : {}),
       },
     });
 
@@ -158,9 +161,11 @@ function SignUpForm() {
         </p>
       )}
 
+      <Turnstile onToken={setCaptchaToken} />
+
       <button
         type="submit"
-        disabled={loading || !email || !password || !name}
+        disabled={loading || !email || !password || !name || (turnstileEnabled && !captchaToken)}
         className="w-full rounded-lg bg-teal py-3 text-sm font-semibold text-white transition-colors hover:bg-[#2a8d8d] disabled:opacity-40"
       >
         {loading ? "Creating account…" : "Create account & verify email"}

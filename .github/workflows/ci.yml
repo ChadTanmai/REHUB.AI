@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        # Build succeeds without secrets — Supabase/Anthropic/ElevenLabs are all
+        # optional and guarded at runtime.
+        run: npm run build
+
+  security-audit:
+    runs-on: ubuntu-latest
+    # Runs on GitHub's network (no corporate TLS filter), so `npm audit` works
+    # here even when it can't run on a restricted dev network.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+
+      - name: npm audit (production deps)
+        # Non-blocking for now so it reports without breaking merges. Once the
+        # tree is clean, drop `|| true` and lower --audit-level to fail on highs.
+        run: npm audit --omit=dev --audit-level=high || true
+
+      - name: npm audit (full, informational)
+        run: npm audit || true

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import AuthCard from "@/components/auth/AuthCard";
 import GoogleButton from "@/components/auth/GoogleButton";
+import Turnstile, { turnstileEnabled } from "@/components/auth/Turnstile";
 import { getAuthClient } from "@/lib/auth/supabase-browser";
 import { normalizeFacilityCode, formatJoinCodeInput } from "@/lib/security";
 
@@ -18,6 +19,7 @@ function SignInForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState(
@@ -40,6 +42,7 @@ function SignInForm() {
     const { error: err } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
+      ...(captchaToken ? { options: { captchaToken } } : {}),
     });
     setLoading(false);
     if (err) {
@@ -234,9 +237,11 @@ function SignInForm() {
         <p className="rounded-lg bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p>
       )}
 
+      <Turnstile onToken={setCaptchaToken} />
+
       <button
         type="submit"
-        disabled={loading || !email || !password}
+        disabled={loading || !email || !password || (turnstileEnabled && !captchaToken)}
         className="w-full rounded-lg bg-navy py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0c2030] disabled:opacity-40"
       >
         {loading ? "Signing in…" : "Sign in"}
