@@ -191,6 +191,18 @@ drop policy if exists directory_read on facility_directory;
 create policy directory_read on facility_directory for select using (true);
 
 -- ─────────────────────────────────────────────────────────────────────────
+-- ⚠️  SECURITY WARNING — DEMO-ONLY FILE. DO NOT USE FOR REAL PATIENT DATA.
+--
+-- The `demo_all` policies below are WORLD-OPEN: `using (true)` for the anon
+-- role means ANY anonymous client can read and write ALL rows in these tables.
+-- This all-in-one file is a quick local-demo shortcut only.
+--
+-- For a REAL deployment, apply the numbered migrations in order
+-- (supabase/migrations/0001 → 0009). Migration 0009_secure_rls.sql DROPS these
+-- demo policies and locks every table down to the facility owner, routing
+-- anonymous patients through validated SECURITY DEFINER RPCs. Then run
+-- supabase/rls_break_test.sql to confirm isolation before storing PHI.
+-- ─────────────────────────────────────────────────────────────────────────
 -- DEMO POLICIES (anon may read/write operational tables).
 -- These let the app run with only the anon key. They are NOT safe for real
 -- patient data. Drop them and apply the PRODUCTION policies below before

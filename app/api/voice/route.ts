@@ -17,6 +17,8 @@
  * When off, the client transparently uses the free browser voice.
  */
 
+import { sameOriginOk, rateLimit, clientIp } from "@/lib/apiGuard";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,11 @@ export async function POST(req: Request) {
   // No key, or the kill switch is off → report unavailable so the client falls
   // back to the free browser voice and we spend zero ElevenLabs characters.
   if (!key || !enabled) return Response.json({ available: false });
+  // Guard the paid TTS endpoint: cross-site → reject; over-rate → graceful
+  // fallback to the browser voice. Tighter than /api/ai (voice isn't safety-
+  // critical and costs ElevenLabs characters).
+  if (!sameOriginOk(req)) return Response.json({ available: false }, { status: 403 });
+  if (!rateLimit(`voice:${clientIp(req)}`, 30, 60_000)) return Response.json({ available: false });
 
   let text = "";
   try {

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { hubiSystem } from "@/lib/ai/hubi";
+import { sameOriginOk, rateLimit, clientIp } from "@/lib/apiGuard";
 
 /**
  * Hubi — the single secure AI service layer for all of ReHub.
@@ -406,6 +407,13 @@ async function runSearch(provider: Provider, body: Record<string, unknown>) {
 export async function POST(req: Request) {
   const provider = getProvider();
   if (provider === "none") return Response.json({ available: false });
+
+  // Guard the paid endpoint. Reject cross-site browser calls outright; on rate
+  // limit, degrade GRACEFULLY to { available:false } so the client falls back to
+  // the deterministic engine — a patient's triage is never blocked. Limit is
+  // generous (120/min per IP) to comfortably serve a facility's devices.
+  if (!sameOriginOk(req)) return Response.json({ available: false }, { status: 403 });
+  if (!rateLimit(`ai:${clientIp(req)}`, 120, 60_000)) return Response.json({ available: false });
 
   let body: Record<string, unknown>;
   try {
