@@ -36,6 +36,25 @@ const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-2025100
 // The `effort` parameter is supported on Opus/Fable and Sonnet 4.6 — but NOT on
 // Haiku 4.5 or Sonnet 4.5 (they 400). Gate it so any model works.
 const SUPPORTS_EFFORT = /opus|fable/i.test(ANTHROPIC_MODEL) || /sonnet-4-6/i.test(ANTHROPIC_MODEL);
+
+// ── Patient-safety floor ─────────────────────────────────────────────────────
+// The deterministic engine (Layer 1) sets a baseline urgency. The AI (Layer 3)
+// may only RAISE it. This server-side floor (Layer 4) guarantees that, no matter
+// what the model returns, the result is never LESS urgent than the deterministic
+// rating — even if a client forgets to enforce it.
+const URGENCY_RANK: Record<string, number> = {
+  Critical: 5, High: 4, Medium: 3, Low: 2, Informational: 1,
+};
+function mostSevereUrgency(a: string, b: string): string {
+  return (URGENCY_RANK[a] ?? 0) >= (URGENCY_RANK[b] ?? 0) ? a : b;
+}
+const SAFE_ACTION: Record<string, string> = {
+  Critical: "Respond immediately — possible medical emergency. Escalate to a nurse now.",
+  High: "Attend promptly — clinical attention may be needed.",
+  Medium: "Send a staff member to assist.",
+  Low: "Fulfill when convenient.",
+  Informational: "No action needed beyond a reply.",
+};
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free";
 
 export function modelFor(p: Provider): string {
@@ -119,48 +138,87 @@ const TRIAGE_SCHEMA = {
 
 const TRIAGE_INSTRUCTIONS =
   "Classify a patient's request into an urgency level for the nursing staff. " +
-  "SAFETY FIRST: when uncertain, round UP, never down. Treat any sign of breathing difficulty, " +
-  "chest pain, fall, stroke symptoms (face droop, slurred speech, weakness), severe bleeding, " +
-  "or loss of consciousness as Critical. 'High' = urgent pain, medication needs, or distress. " +
-  "'Medium' = comfort/mobility needs (water, bathroom, repositioning). 'Low' = minor comfort " +
-  "(blanket, TV, light). Keep triageReason to one short clinical sentence; suggestedAction to a " +
-  "short imperative for the nurse; summary to a brief neutral paraphrase. Provide confidence 0..1. " +
+  "SAFETY FIRST: when uncertain, round UP, never down. A deterministic safety engine has already " +
+  "rated this request and that rating is a FLOOR — you may RAISE the level but you must NEVER return " +
+  "a level below it. Treat any sign of breathing difficulty, chest pain, fall, stroke symptoms (face " +
+  "droop, slurred speech, weakness), severe bleeding, choking, seizure, or loss of consciousness as " +
+  "Critical. 'High' = urgent pain, can't-move/immobility, medication needs, dizziness, or distress. " +
+  "'Medium' = comfort/mobility needs (water, bathroom, repositioning, generic help). 'Low' = minor " +
+  "comfort (blanket, TV, light). Keep triageReason to one short clinical sentence; suggestedAction to " +
+  "a short imperative for the nurse; summary to a brief neutral paraphrase. Provide confidence 0..1. " +
   "Never invent symptoms the patient did not state.";
 
 async function runTriage(provider: Provider, body: Record<string, unknown>) {
+  const started = Date.now();
   const text = String(body.text ?? "").slice(0, 1000);
   const preset = String(body.presetUrgency ?? "Low");
   const memory = String(body.patientContext ?? "").slice(0, 600);
   const userMsg =
     (memory ? `${memory}\n\n` : "") +
     `Patient request (transcript): "${text || "(no words — button press)"}"\n` +
-    `A deterministic keyword engine rated this "${preset}". You may RAISE the level if warranted; ` +
-    `only lower if clearly non-clinical. Classify now.`;
+    `The deterministic safety engine rated this "${preset}". That is a hard FLOOR — RAISE if warranted, ` +
+    `never go below it. Classify now.`;
   const system = hubiSystem(TRIAGE_INSTRUCTIONS);
 
-  if (provider === "anthropic") {
-    const a = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-    // Structured output (format) is supported on Haiku 4.5; only `effort` is not.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const outputConfig: any = { format: { type: "json_schema", schema: TRIAGE_SCHEMA as never } };
-    if (SUPPORTS_EFFORT) outputConfig.effort = "low";
-    const resp = await a.messages.create({
-      model: ANTHROPIC_MODEL, max_tokens: 400,
-      thinking: { type: "disabled" },
-      output_config: outputConfig,
-      system, messages: [{ role: "user", content: userMsg }],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
-    return { available: true, model: ANTHROPIC_MODEL, ...JSON.parse(firstText(resp)) };
+  try {
+    let model = modelFor(provider);
+    let parsed: Record<string, unknown>;
+    if (provider === "anthropic") {
+      const a = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+      // Structured output (format) is supported on Haiku 4.5; only `effort` is not.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const outputConfig: any = { format: { type: "json_schema", schema: TRIAGE_SCHEMA as never } };
+      if (SUPPORTS_EFFORT) outputConfig.effort = "low";
+      const resp = await a.messages.create({
+        model: ANTHROPIC_MODEL, max_tokens: 400,
+        thinking: { type: "disabled" },
+        output_config: outputConfig,
+        system, messages: [{ role: "user", content: userMsg }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+      model = ANTHROPIC_MODEL;
+      parsed = JSON.parse(firstText(resp));
+    } else {
+      const raw = await orChat(
+        system +
+        '\n\nRespond with ONLY valid JSON: {"urgencyLevel":"Critical|High|Medium|Low|Informational",' +
+        '"requestType":"string","triageReason":"one clinical sentence","suggestedAction":"short imperative",' +
+        '"summary":"brief neutral paraphrase","confidence":0.0}',
+        userMsg, 400, true,
+      );
+      model = OPENROUTER_MODEL;
+      parsed = JSON.parse(extractJson(raw));
+    }
+
+    // ── Layer 4: enforce the deterministic floor server-side ──────────────────
+    const aiLevel = String(parsed.urgencyLevel ?? preset);
+    const floored = mostSevereUrgency(preset, aiLevel);
+    const wasFloored = floored !== aiLevel;
+    if (wasFloored) {
+      parsed.urgencyLevel = floored;
+      // Keep an action consistent with the (higher) floored level.
+      parsed.suggestedAction = SAFE_ACTION[floored] ?? parsed.suggestedAction;
+      parsed.triageReason = `${parsed.triageReason ?? ""} (kept at ${floored} by safety floor).`.trim();
+    }
+    // Structured, PII-free log line for ops/observability.
+    console.log(`[hubi.triage] model=${model} ms=${Date.now() - started} preset=${preset} ai=${aiLevel} final=${parsed.urgencyLevel} floored=${wasFloored} conf=${parsed.confidence ?? "?"} ok=true`);
+    return { available: true, model, ...parsed, floored: wasFloored };
+  } catch (e) {
+    // ── Conservative failure: never lose or downgrade a request. Fall back to
+    // the deterministic rating so the patient is still routed safely. ──────────
+    console.log(`[hubi.triage] model=${modelFor(provider)} ms=${Date.now() - started} preset=${preset} ai=ERROR final=${preset} ok=false err=${e instanceof Error ? e.message.slice(0, 80) : "unknown"}`);
+    return {
+      available: true,
+      model: modelFor(provider),
+      urgencyLevel: preset,
+      requestType: "Help",
+      triageReason: "AI triage unavailable — using the deterministic safety rating.",
+      suggestedAction: SAFE_ACTION[preset] ?? "Send a staff member to assist.",
+      summary: text.slice(0, 120),
+      confidence: 0.5,
+      floored: true,
+    };
   }
-  const raw = await orChat(
-    system +
-    '\n\nRespond with ONLY valid JSON: {"urgencyLevel":"Critical|High|Medium|Low|Informational",' +
-    '"requestType":"string","triageReason":"one clinical sentence","suggestedAction":"short imperative",' +
-    '"summary":"brief neutral paraphrase","confidence":0.0}',
-    userMsg, 400, true,
-  );
-  return { available: true, model: OPENROUTER_MODEL, ...JSON.parse(extractJson(raw)) };
 }
 
 // ─── Summary ───────────────────────────────────────────────────────────────
