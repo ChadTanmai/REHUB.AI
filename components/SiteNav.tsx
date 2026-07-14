@@ -5,7 +5,6 @@ const LINKS = [
   { href: "/resident", label: "Resident" },
   { href: "/staff", label: "Staff" },
   { href: "/admin", label: "Admin" },
-  { href: "/demo", label: "Demo" },
   { href: "/setup", label: "Set up" },
   { href: "/about", label: "About" },
 ];
@@ -46,8 +45,7 @@ export function SiteFooter() {
         <RehubWordmark />
         <p className="mt-3 max-w-2xl text-sm text-slate/70">
           Rehub is a communication and workflow tool. It does not replace
-          emergency response systems or medical judgment. Demo mode uses
-          fictional data only — no real patient information.
+          emergency response systems or medical judgment.
         </p>
         <p className="mt-4 text-xs text-slate/50">
           © {new Date().getFullYear()} Rehub. Built for rehab centers, senior

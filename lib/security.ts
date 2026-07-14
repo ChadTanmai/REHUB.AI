@@ -57,7 +57,3 @@ export function formatJoinCodeInput(input: string): string {
   const m = squashed.match(/^([A-Z]+)(\d.*)$/);
   return m ? `${m[1]}-${m[2]}` : squashed;
 }
-
-/** Reminder string surfaced in setup flows. */
-export const DEMO_DATA_NOTICE =
-  "Demo mode uses fictional names only. Do not enter real patient information.";

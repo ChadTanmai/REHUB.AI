@@ -26,7 +26,7 @@ function describe(path: string): string {
   if (path.startsWith("/onboarding")) return "facility onboarding";
   if (path.startsWith("/pricing")) return "the pricing page";
   if (path.startsWith("/for-facilities")) return "the for-facilities page";
-  if (path.startsWith("/contact") || path.startsWith("/demo")) return "the contact / demo page";
+  if (path.startsWith("/contact")) return "the contact page";
   return "the ReHub website";
 }
 

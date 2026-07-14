@@ -55,7 +55,7 @@ const METRICS = [
   { value: "1,221", label: "US rehab facilities in the directory" },
   { value: "< 5 min", label: "Typical facility setup time" },
   { value: "Real-time", label: "Request delivery to staff" },
-  { value: "100%", label: "Offline-capable demo mode" },
+  { value: "100%", label: "Tenant-isolated by design" },
 ];
 
 /* ─── Page ──────────────────────────────────────────────────────────────── */
@@ -241,12 +241,6 @@ export default function Home() {
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                     Download the proposal (PDF)
                   </a>
-                  <Link
-                    href="/demo"
-                    className="text-center text-sm font-medium text-teal hover:underline"
-                  >
-                    Or try the live demo →
-                  </Link>
                 </div>
               </div>
             </div>

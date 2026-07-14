@@ -29,7 +29,6 @@ import type {
 } from "./types";
 import { classifyRequest } from "./aiClassifier";
 import { buildSummary } from "./aiSummary";
-import { DEMO_FACILITY_CODE } from "./mockData";
 import {
   canTransition,
   minutesBetween,
@@ -49,29 +48,12 @@ import { SUPABASE_ENABLED } from "./supabase";
 import { upsertFacilityFromStore, upsertRoom } from "./supabase/facilities";
 
 const STORAGE_PREFIX = "rehub:facility:";
-const DEMO_PREFIX = "rehub:demo:";          // demo facilities use a separate key
 const CHANNEL_NAME = "rehub-sync";
-const DEMO_TTL_MS = 2 * 60 * 60 * 1000;   // demo data expires after 2 hours
+// Reserved so no real facility can collide with the retired public demo code.
+const RESERVED_FACILITY_CODE = "REHUB-DEMO";
 
-function storageKey(facilityId: string, isDemo?: boolean): string {
-  return isDemo ? `${DEMO_PREFIX}${facilityId}` : `${STORAGE_PREFIX}${facilityId}`;
-}
-
-/** Purge all demo facilities older than DEMO_TTL_MS from localStorage. */
-function purgeExpiredDemoFacilities() {
-  if (typeof window === "undefined") return;
-  const now = Date.now();
-  for (let i = localStorage.length - 1; i >= 0; i--) {
-    const key = localStorage.key(i);
-    if (!key?.startsWith(DEMO_PREFIX)) continue;
-    try {
-      const ws = JSON.parse(localStorage.getItem(key)!) as FacilityWorkspace & { _demoCreatedAt?: number };
-      const age = now - (ws._demoCreatedAt ?? 0);
-      if (age > DEMO_TTL_MS) localStorage.removeItem(key);
-    } catch {
-      localStorage.removeItem(key); // corrupted — remove
-    }
-  }
+function storageKey(facilityId: string): string {
+  return `${STORAGE_PREFIX}${facilityId}`;
 }
 
 function uid(prefix: string): string {
@@ -115,9 +97,6 @@ class RehubStore {
   private currentOwnerId: string | null = null;
 
   constructor() {
-    // Purge expired demo facilities on every init so old demo data never persists.
-    purgeExpiredDemoFacilities();
-
     if (typeof window !== "undefined" && "BroadcastChannel" in window) {
       this.channel = new BroadcastChannel(CHANNEL_NAME);
       this.channel.onmessage = (e: MessageEvent) => {
@@ -126,10 +105,8 @@ class RehubStore {
       };
       // Cross-tab fallback for browsers/contexts without our channel reach.
       window.addEventListener("storage", (e) => {
-        if (e.key && (e.key.startsWith(STORAGE_PREFIX) || e.key.startsWith(DEMO_PREFIX))) {
-          const facilityId = e.key.startsWith(DEMO_PREFIX)
-            ? e.key.slice(DEMO_PREFIX.length)
-            : e.key.slice(STORAGE_PREFIX.length);
+        if (e.key && e.key.startsWith(STORAGE_PREFIX)) {
+          const facilityId = e.key.slice(STORAGE_PREFIX.length);
           this.reloadFromStorage(facilityId);
         }
       });
@@ -200,9 +177,7 @@ class RehubStore {
   private tryLoadWorkspace(facilityId: string): FacilityWorkspace | null {
     if (typeof window === "undefined") return null;
     try {
-      const raw =
-        localStorage.getItem(storageKey(facilityId)) ??
-        localStorage.getItem(storageKey(facilityId, true));
+      const raw = localStorage.getItem(storageKey(facilityId));
       if (!raw) return null;
       return JSON.parse(raw) as FacilityWorkspace;
     } catch {
@@ -244,12 +219,8 @@ class RehubStore {
   private persist(facilityId: string, broadcast = true) {
     const ws = this.workspaces.get(facilityId);
     if (!ws || typeof window === "undefined") return;
-    const isDemo = (ws as { _isDemo?: boolean })._isDemo === true;
     try {
-      const payload = isDemo
-        ? { ...ws, _demoCreatedAt: (ws as { _demoCreatedAt?: number })._demoCreatedAt ?? Date.now() }
-        : ws;
-      localStorage.setItem(storageKey(facilityId, isDemo), JSON.stringify(payload));
+      localStorage.setItem(storageKey(facilityId), JSON.stringify(ws));
     } catch {
       /* storage may be unavailable (private mode) — in-memory still works */
     }
@@ -258,15 +229,13 @@ class RehubStore {
     }
     // Push to the network sync server so other devices on the same WiFi
     // receive the update via SSE (fire-and-forget).
-    if (broadcast && !isDemo) pushSnapshot(facilityId, ws);
+    if (broadcast) pushSnapshot(facilityId, ws);
   }
 
   reloadFromStorage(facilityId: string) {
     if (typeof window === "undefined") return;
     try {
-      // Check both regular and demo prefixes
-      const raw = localStorage.getItem(storageKey(facilityId)) ??
-                  localStorage.getItem(storageKey(facilityId, true));
+      const raw = localStorage.getItem(storageKey(facilityId));
       if (raw) {
         this.workspaces.set(facilityId, JSON.parse(raw) as FacilityWorkspace);
         this.emit();
@@ -285,8 +254,7 @@ class RehubStore {
 
     if (typeof window !== "undefined") {
       try {
-        const raw = localStorage.getItem(storageKey(facilityId)) ??
-                    localStorage.getItem(storageKey(facilityId, true));
+        const raw = localStorage.getItem(storageKey(facilityId));
         if (raw) {
           ws = JSON.parse(raw) as FacilityWorkspace;
           this.workspaces.set(facilityId, ws);
@@ -337,7 +305,6 @@ class RehubStore {
     };
 
     for (const ws of this.workspaces.values()) {
-      if ((ws as { _isDemo?: boolean })._isDemo) continue;
       consider(ws.facility);
     }
     if (typeof window !== "undefined") {
@@ -382,7 +349,6 @@ class RehubStore {
     if (typeof window !== "undefined") {
       try {
         localStorage.removeItem(storageKey(facilityId));
-        localStorage.removeItem(storageKey(facilityId, true));
       } catch {
         /* ignore */
       }
@@ -451,8 +417,8 @@ class RehubStore {
     const squash = (c: string) => c.toUpperCase().replace(/[^A-Z0-9]/g, "");
     const normalized = squash(code);
     if (!normalized) return null;
-    // Legacy: support old REHUB-DEMO code for backwards compat only
-    if (normalized === squash(DEMO_FACILITY_CODE)) return null;
+    // Retired public demo code — never resolves to a real facility.
+    if (normalized === squash(RESERVED_FACILITY_CODE)) return null;
     // Scan loaded + persisted facilities.
     for (const ws of this.workspaces.values()) {
       if (squash(ws.facility.facilityCode) === normalized) {
@@ -462,7 +428,7 @@ class RehubStore {
     if (typeof window !== "undefined") {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (!key?.startsWith(STORAGE_PREFIX) && !key?.startsWith(DEMO_PREFIX)) continue;
+        if (!key?.startsWith(STORAGE_PREFIX)) continue;
         try {
           const ws = JSON.parse(localStorage.getItem(key)!) as FacilityWorkspace;
           if (squash(ws.facility.facilityCode) === normalized) {
@@ -478,35 +444,6 @@ class RehubStore {
   }
 
   // --- mutations: setup / pairing ---
-
-  /**
-   * Create an ephemeral demo facility.
-   * Stored under DEMO_PREFIX and automatically expired after 2 hours.
-   * Never pushed to Supabase or network sync.
-   */
-  createDemoFacility(input: { name: string; facilityCode: string }): Facility {
-    const facility: Facility = {
-      id: uid("demo"),
-      name: sanitizeField(input.name, 80) || "Demo Facility",
-      facilityCode: input.facilityCode.trim().toUpperCase(),
-      roomCount: 0,
-      teamName: "Care Team",
-      createdAt: new Date().toISOString(),
-    };
-    const ws = {
-      facility,
-      rooms: [],
-      therapists: [],
-      requests: [],
-      events: [],
-      _isDemo: true,
-      _demoCreatedAt: Date.now(),
-    } as unknown as FacilityWorkspace;
-    this.workspaces.set(facility.id, ws);
-    this.persist(facility.id);
-    this.emit();
-    return facility;
-  }
 
   /**
    * Auto-publish a facility (and optionally a room) to the cloud using the

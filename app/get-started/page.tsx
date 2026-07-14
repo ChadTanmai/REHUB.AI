@@ -126,8 +126,8 @@ export default function GetStartedPage() {
               <Link href="/auth/signin" className="font-semibold text-teal hover:underline">Sign in</Link>
             </p>
             <p className="text-sm text-slate/50">
-              Just exploring?{" "}
-              <Link href="/demo" className="font-medium text-navy hover:underline">Try the live demo →</Link>
+              Evaluating for your facility?{" "}
+              <Link href="/contact" className="font-medium text-navy hover:underline">Request a demo →</Link>
             </p>
           </div>
         </Reveal>

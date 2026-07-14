@@ -6,7 +6,7 @@ const COLUMNS = [
     title: "Product",
     links: [
       { href: "/#product", label: "Features" },
-      { href: "/demo", label: "Live demo" },
+      { href: "/contact", label: "Request a demo" },
       { href: "/for-facilities", label: "For facilities" },
     ],
   },
@@ -77,8 +77,7 @@ export default function MarketingFooter() {
         <div className="mt-10 border-t border-gray-muted pt-6">
           <p className="text-sm text-slate/70">
             Rehub is a communication and workflow tool. It does not replace
-            emergency response systems or medical judgment. Demo mode uses
-            fictional data only — no real patient information.
+            emergency response systems or medical judgment.
           </p>
           <p className="mt-3 text-xs text-slate/50">
             © {new Date().getFullYear()} Rehub. Built for rehab centers, senior

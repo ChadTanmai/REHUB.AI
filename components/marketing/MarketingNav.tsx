@@ -70,10 +70,10 @@ export default function MarketingNav() {
           ) : (
             <>
               <Link
-                href="/demo"
+                href="/contact"
                 className="rounded-md px-3 py-1.5 text-sm font-medium text-slate transition-colors hover:text-navy"
               >
-                Live demo
+                Request a demo
               </Link>
               <Link
                 href="/auth/signin"
@@ -131,11 +131,11 @@ export default function MarketingNav() {
                 </Link>
               ))}
               <Link
-                href="/demo"
+                href="/contact"
                 onClick={() => setOpen(false)}
                 className="block rounded-md px-3 py-2.5 text-base font-medium text-slate hover:bg-white hover:text-navy"
               >
-                Live demo
+                Request a demo
               </Link>
               {signedIn ? (
                 <Link

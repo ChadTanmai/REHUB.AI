@@ -58,7 +58,7 @@ export function useWorkspace(facilityId: string): FacilityWorkspace {
     return unsub;
   }, [facilityId, store]);
 
-  // WiFi/local-network SSE sync (always active in demo mode).
+  // WiFi/local-network SSE sync (always active, independent of Supabase).
   useEffect(() => {
     const sub = subscribeToNetworkSync(facilityId, (remoteWorkspace) => {
       // The server sent us a workspace snapshot from another device.
