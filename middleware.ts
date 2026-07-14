@@ -20,7 +20,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * can be evaluated without creating an account.
  */
 
-const STAFF_ROUTES   = ["/therapist", "/admin", "/facility", "/onboarding", "/dashboard", "/account"];
+const STAFF_ROUTES   = ["/therapist", "/admin", "/facility", "/onboarding", "/dashboard", "/account", "/rooms", "/diagnostics"];
 const AUTH_PAGES     = ["/auth/signin", "/auth/signup", "/auth/verify-email", "/auth/reset-password"];
 
 const SUPABASE_ENABLED =
