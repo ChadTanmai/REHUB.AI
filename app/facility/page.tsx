@@ -38,7 +38,6 @@ export default function FacilityPage() {
   const therapistSession = getTherapistSession();
   if (!therapistSession || !getStore().ownsFacility(therapistSession.facilityId)) return null;
   const facilityId = therapistSession.facilityId;
-  const userName = therapistSession.name;
   const ws = getStore().getWorkspace(facilityId);
   const active = ws.requests.filter(isActive);
 
@@ -54,7 +53,7 @@ export default function FacilityPage() {
 
   return (
     <>
-      <AppNav facilityName={ws.facility.name} userName={userName} />
+      <AppNav facilityName={ws.facility.name} />
       <main className="flex-1 bg-offwhite">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
 

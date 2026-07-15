@@ -25,10 +25,8 @@ const NAV_ITEMS = [
 
 export default function AppNav({
   facilityName,
-  userName,
 }: {
   facilityName?: string;
-  userName?: string;
 }) {
   const path = usePathname();
   const { signedIn } = useAuth();

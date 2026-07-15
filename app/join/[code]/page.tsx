@@ -5,13 +5,10 @@
  * Pre-populates the code and drops the user straight into the room-selection step.
  */
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, Suspense } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
 import { RehubWordmark } from "@/components/RehubLogo";
-import { lookupFacilityByCode, type FacilityLookupResult } from "@/lib/supabase/joinLookup";
 import { normalizeFacilityCode } from "@/lib/security";
 import { useMounted } from "@/lib/useRehub";
 

@@ -25,9 +25,13 @@ export default function ProfilePage() {
     if (!loading && !signedIn) router.replace("/auth/signin");
   }, [loading, signedIn, router]);
 
+  // Syncs local *editable* form fields from `profile`, which loads
+  // asynchronously (Supabase) after mount — this can't be a render-time
+  // derivation since the source data isn't available synchronously.
   useEffect(() => {
     if (profile) {
       const parts = profile.fullName.split(" ");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see comment above
       setFirstName(parts[0] ?? "");
       setLastName(parts.slice(1).join(" "));
       setDisplayName(profile.displayName);
@@ -58,7 +62,7 @@ export default function ProfilePage() {
 
   return (
     <>
-      <AppNav facilityName={profile.facilityName} userName={profile.displayName} />
+      <AppNav facilityName={profile.facilityName} />
       <main className="flex-1 bg-offwhite">
         <div className="mx-auto max-w-3xl px-5 py-10 sm:px-6">
           <h1 className="text-2xl font-bold text-navy">Profile</h1>

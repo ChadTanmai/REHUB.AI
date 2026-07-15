@@ -206,7 +206,6 @@ export default function GlobalCommandCenter() {
       });
     }, 2000);
     return () => { unsub(); clearInterval(prune); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 
   const ws = facilityId ? store.getWorkspace(facilityId) : null;

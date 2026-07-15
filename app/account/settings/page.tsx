@@ -35,7 +35,10 @@ export default function SettingsPage() {
   }, [loading, signedIn, router]);
 
   useEffect(() => {
+    // localStorage is a browser-only API — can't read it during SSR/initial
+    // render, so this genuinely needs to run post-mount in an effect.
     const saved = (localStorage.getItem("rehub:theme") as Theme) ?? "light";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see comment above
     setTheme(saved);
     try {
       const n = localStorage.getItem("rehub:notifs");
@@ -91,7 +94,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <AppNav facilityName={profile.facilityName} userName={profile.displayName} />
+      <AppNav facilityName={profile.facilityName} />
       <main className="flex-1 bg-offwhite">
         <div className="mx-auto max-w-3xl px-5 py-10 sm:px-6">
           <h1 className="text-2xl font-bold text-navy">Settings</h1>

@@ -111,7 +111,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <AppNav facilityName={ws?.facility.name ?? profile?.facilityName} userName={profile?.displayName} />
+      <AppNav facilityName={ws?.facility.name ?? profile?.facilityName} />
 
       <main className="flex-1 bg-offwhite">
         <div className="mx-auto max-w-6xl px-5 py-8 sm:px-6">

@@ -22,9 +22,6 @@ const STATUS_META: Record<RoomStatus, { label: string; color: string; dot: strin
   Restricted:         { label: "Restricted",        color: "text-coral",  dot: "bg-coral" },
 };
 
-type AmberColor = string;
-const AMBER = "#d97706" as AmberColor;
-
 function RoomStatusBadge({ status }: { status: RoomStatus }) {
   const m = STATUS_META[status] ?? STATUS_META["Available"];
   return (

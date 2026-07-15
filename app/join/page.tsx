@@ -132,12 +132,10 @@ function JoinFlow() {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [patientName, setPatientName] = useState("");
   const [error, setError] = useState("");
-  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     if (!mounted || !urlCode) return;
     doLookup(urlCode);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, urlCode]);
 
   async function doLookup(code: string) {
@@ -181,10 +179,9 @@ function JoinFlow() {
 
   function handleJoinStaff() {
     if (!facility) return;
-    setJoining(true);
     const store = getStore();
     const facilityId = store.facilityIdForCode(facility.facilityCode);
-    if (!facilityId) { setError("Could not connect. Try again."); setJoining(false); return; }
+    if (!facilityId) { setError("Could not connect. Try again."); return; }
     const ws = store.getWorkspace(facilityId);
     const therapist = store.addTherapist(facilityId, {
       name: "Care Team Member",

@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { aiGuide } from "@/lib/ai/client";
 import { primeTTS, speak } from "@/lib/tts";
 import { HUBI_NAME, HUBI_FULL } from "@/lib/ai/hubi";
+import { useMounted } from "@/lib/useRehub";
 
 type Msg = { role: "hubi" | "user"; text: string };
 
@@ -81,7 +82,7 @@ export default function HubiWidget({
   signedIn?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [messages, setMessages] = useState<Msg[]>([{ role: "hubi", text: INTRO }]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -91,7 +92,6 @@ export default function HubiWidget({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recRef = useRef<any>(null);
 
-  useEffect(() => setMounted(true), []);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, thinking]);

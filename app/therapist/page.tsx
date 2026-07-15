@@ -8,7 +8,7 @@ import StaffDashboard from "@/components/StaffDashboard";
 import EmptyState from "@/components/EmptyState";
 import { getStore } from "@/lib/store";
 import { getTherapistSession } from "@/lib/session";
-import { useMounted, useWorkspace, useStoreVersion } from "@/lib/useRehub";
+import { useMounted, useStoreVersion } from "@/lib/useRehub";
 
 function PeopleIcon() {
   return (
@@ -56,7 +56,7 @@ export default function TherapistPage() {
 
   return (
     <>
-      <AppNav facilityName={full.facility.name} userName={session.name} />
+      <AppNav facilityName={full.facility.name} />
       <main className="flex-1 bg-offwhite">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-gray-muted bg-white p-4 shadow-soft sm:p-5">

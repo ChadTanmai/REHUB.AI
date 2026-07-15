@@ -46,7 +46,7 @@ export default function AdminPage() {
 
   return (
     <>
-      <AppNav facilityName={ws.facility.name} userName={session.name} />
+      <AppNav facilityName={ws.facility.name} />
       <main className="flex-1 bg-offwhite">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
           <div className="mb-6 rounded-xl border border-gray-muted bg-white p-4 shadow-soft sm:p-5">

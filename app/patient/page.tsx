@@ -8,7 +8,7 @@ import { enqueueRequest, ensureAutoFlush } from "@/lib/supabase/outbox";
 import { getRequestStatus } from "@/lib/supabase/requests";
 import { openLiveBroadcaster } from "@/lib/supabase/liveChannel";
 import { classifyRequest } from "@/lib/aiClassifier";
-import { aiRoute, aiAsk, aiTriage } from "@/lib/ai/client";
+import { aiAsk, aiTriage } from "@/lib/ai/client";
 import { buildPatientMemory } from "@/lib/ai/memory";
 import SendConfirmation from "@/components/SendConfirmation";
 import { primeTTS, speak } from "@/lib/tts";
@@ -46,8 +46,6 @@ export default function PatientPage() {
   const [showTyping, setShowTyping] = useState(false);
   const [typedDraft, setTypedDraft] = useState("");
   const [sttError, setSttError] = useState("");
-  // Smart routing: staff member the patient addressed by name.
-  const [routedTo, setRoutedTo] = useState<string | null>(null);
   // AI ask assistant — patient can ask questions without notifying nurses.
   const [askMode, setAskMode] = useState(false);
   const [askAnswer, setAskAnswer] = useState<string | null>(null);
@@ -77,7 +75,15 @@ export default function PatientPage() {
   const liveAiUrgency = useRef<UrgencyLevel | null>(null);
 
   useEffect(() => { ensureAutoFlush(); }, []);
-  useEffect(() => { return () => stopEverything(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // `stopEverything` is a hoisted function declaration defined below (line
+  // ~103) — safe to reference here via JS hoisting, re-created fresh each
+  // render like the rest of this component's helpers. Deps are intentionally
+  // empty: this must run its cleanup exactly once, on unmount.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- hoists safely, see comment above
+    return () => stopEverything();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above; intentionally run-once
+  }, []);
 
   if (!mounted) return <div className="min-h-screen" style={{ background: "#F5F1E8" }} />;
 
@@ -130,6 +136,7 @@ export default function PatientPage() {
       transcript: text,
       speaking,
       urgencyLevel: urgency,
+      // eslint-disable-next-line react-hooks/purity -- broadcastLive only runs from speech-recognition event handlers, never during render
       ts: Date.now(),
     });
   }
@@ -209,6 +216,7 @@ export default function PatientPage() {
    */
   function startAckPolling(messageId: string) {
     stopPolling();
+    // eslint-disable-next-line react-hooks/purity -- startAckPolling only runs from sendRequest (a click/submit handler), never during render
     pollStartRef.current = Date.now();
     const check = async () => {
       const info = await getRequestStatus(messageId);
@@ -229,7 +237,6 @@ export default function PatientPage() {
     ackedRef.current = false;
     setFlow("idle");
     setAckBy(null);
-    setRoutedTo(null);
     setAskAnswer(null);
   }
 
@@ -382,7 +389,6 @@ export default function PatientPage() {
 
   function sendRequest(source: "Button" | "Voice" | "Typed", text: string) {
     if (!room) return;
-    setRoutedTo(null);
     setAckBy(null);
     setTranscript("");
     transcriptRef.current = "";
@@ -420,14 +426,6 @@ export default function PatientPage() {
     // Single, continuous confirmation animation + spoken reassurance.
     setFlow("confirm");
     void speak("Your message has been sent. Your care team has it now.");
-
-    // Smart routing: if patient mentioned a staff name, detect and surface it
-    const therapistNames = ws.therapists.map((t) => t.name);
-    if (text && therapistNames.length > 0) {
-      aiRoute(text, therapistNames).then((result) => {
-        if (result?.staffName) setRoutedTo(result.staffName);
-      }).catch(() => {});
-    }
   }
 
   /** AI ask assistant — answers the patient without notifying nurses. */

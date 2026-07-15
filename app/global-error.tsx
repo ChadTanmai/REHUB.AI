@@ -43,6 +43,11 @@ export default function GlobalError({
               >
                 Reload
               </button>
+              {/* Real <a>, not next/link — this boundary fires when the root
+                  layout itself has crashed, so the app's client-side router
+                  may not be reliable. A plain browser navigation is the
+                  safer "get me out of here" fallback. */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
               <a
                 href="/"
                 style={{

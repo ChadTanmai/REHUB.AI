@@ -112,7 +112,7 @@ export default function OnboardingPage() {
       ccn: matched?.ccn,
     });
 
-    const createdRooms = rooms.map((num, i) =>
+    const createdRooms = rooms.map((num) =>
       store.addRoom(facility.id, {
         roomNumber: num,
         displayName: `Room ${num}`,

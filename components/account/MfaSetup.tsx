@@ -41,6 +41,9 @@ export default function MfaSetup() {
     }
   }, []);
 
+  // Fetches the account's MFA factor list from Supabase on mount — inherently
+  // async/external data, can't be derived during render.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- see comment above
   useEffect(() => { void refresh(); }, [refresh]);
 
   const verified = factors.find((f) => f.status === "verified");

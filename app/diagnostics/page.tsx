@@ -91,10 +91,8 @@ export default function DiagnosticsPage() {
     });
 
     // 3. Facility published to cloud (public lookup RPC).
-    let publishedId: string | null = null;
     try {
       const remote = await lookupFacilityWithRooms(code);
-      publishedId = remote?.id ?? null;
       push({
         key: "pub", label: "Facility published to cloud",
         state: remote ? "pass" : "fail",

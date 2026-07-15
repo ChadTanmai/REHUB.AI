@@ -99,10 +99,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!SUPABASE_ENABLED) {
-      setLoading(false);
-      return;
-    }
+    // loading initializes to SUPABASE_ENABLED (line above), so it's already
+    // false here when Supabase is off — nothing more to do.
+    if (!SUPABASE_ENABLED) return;
     const supabase = getAuthClient();
 
     supabase.auth.getUser().then(({ data }) => {
