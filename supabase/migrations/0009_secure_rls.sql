@@ -53,31 +53,47 @@ begin
 end $$;
 
 -- 2. Ensure RLS stays enabled (idempotent — belt and suspenders).
-alter table facilities      enable row level security;
-alter table rooms           enable row level security;
-alter table therapists      enable row level security;
-alter table requests        enable row level security;
-alter table request_events  enable row level security;
-alter table device_sessions enable row level security;
-alter table leads           enable row level security;
+--    Table-existence-safe: different installs of this schema may not have
+--    every legacy table (e.g. some projects never created `therapists`,
+--    managing staff through `facility_members` instead — 0006).
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'facilities','rooms','therapists','requests',
+    'request_events','device_sessions','leads'
+  ]
+  loop
+    if to_regclass('public.' || t) is not null then
+      execute format('alter table %I enable row level security', t);
+    end if;
+  end loop;
+end $$;
 
--- 3. Owner-scoped policies for the remaining staff-managed tables.
---    (facilities/facility_members → 0006, rooms → 0005, patient_messages → 0007
---     already have scoped policies; dropping demo_all leaves those in force.)
---
---    therapists and the legacy `requests`/`request_events` tables get explicit
---    owner-only access so authenticated staff still work while anon is denied.
-drop policy if exists therapists_owner on therapists;
-create policy therapists_owner on therapists
-  for all to authenticated
-  using (is_facility_owner(facility_id))
-  with check (is_facility_owner(facility_id));
+-- 3. Owner-scoped policies for the remaining staff-managed tables — only for
+--    tables that actually exist on this install.
+do $$
+begin
+  if to_regclass('public.therapists') is not null then
+    execute 'drop policy if exists therapists_owner on therapists';
+    execute $p$
+      create policy therapists_owner on therapists
+        for all to authenticated
+        using (is_facility_owner(facility_id))
+        with check (is_facility_owner(facility_id))
+    $p$;
+  end if;
 
-drop policy if exists requests_owner on requests;
-create policy requests_owner on requests
-  for all to authenticated
-  using (is_facility_owner(facility_id))
-  with check (is_facility_owner(facility_id));
+  if to_regclass('public.requests') is not null then
+    execute 'drop policy if exists requests_owner on requests';
+    execute $p$
+      create policy requests_owner on requests
+        for all to authenticated
+        using (is_facility_owner(facility_id))
+        with check (is_facility_owner(facility_id))
+    $p$;
+  end if;
+end $$;
 
 -- request_events, device_sessions, leads:
 --   • leads is written to localStorage only (lib/leads.ts) — the DB table is
