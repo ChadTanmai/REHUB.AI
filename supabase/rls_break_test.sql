@@ -33,16 +33,30 @@ where  relname in ('facilities','rooms','therapists','requests',
 order by relname;
 
 -- ── TEST 4: anonymous role cannot read patient data directly ───────────────
--- Simulate the anon role a patient device uses. Expected: 0 rows each (RLS
--- denies — there is no anon policy). If any returns rows, isolation FAILED.
-set local role anon;
-select 'facilities'      as t, count(*) from facilities
-union all select 'rooms',           count(*) from rooms
-union all select 'therapists',      count(*) from therapists
-union all select 'requests',        count(*) from requests
-union all select 'patient_messages',count(*) from patient_messages;
-reset role;
--- ↑ every count = 0 = PASS (anon is fully walled off from direct table reads).
+-- Actually switches to the anon role and counts visible rows per table.
+-- Expected: every line reads "0 row(s) visible". Table-existence-safe — only
+-- queries tables that exist on this install; catches permission-denied too
+-- (an even more locked-down result, also a PASS).
+do $$
+declare t text;
+declare n int;
+begin
+  set local role anon;
+  foreach t in array array['facilities','rooms','therapists','requests','patient_messages']
+  loop
+    if to_regclass('public.' || t) is not null then
+      begin
+        execute format('select count(*) from %I', t) into n;
+        raise notice '%: % row(s) visible to anon', t, n;
+      exception when insufficient_privilege then
+        raise notice '%: permission denied to anon (even more locked down — fine)', t;
+      end;
+    end if;
+  end loop;
+  reset role;
+end $$;
+-- ↑ every line should read "0 row(s) visible" (or "permission denied"). Any
+-- other number = anon can still see rows = FAIL, investigate immediately.
 
 -- ── TEST 5: the safe anon RPCs still work ──────────────────────────────────
 -- These SECURITY DEFINER functions are the ONLY way anon reaches data, and they
