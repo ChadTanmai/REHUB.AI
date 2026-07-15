@@ -71,27 +71,46 @@ begin
 end $$;
 
 -- 3. Owner-scoped policies for the remaining staff-managed tables — only for
---    tables that actually exist on this install.
+--    tables that both exist AND have a facility_id column on this install.
+--    (Column presence, not just table presence, varies across installs —
+--    confirmed live: some deployments' `requests` table predates facility_id.)
 do $$
+declare has_col boolean;
 begin
   if to_regclass('public.therapists') is not null then
-    execute 'drop policy if exists therapists_owner on therapists';
-    execute $p$
-      create policy therapists_owner on therapists
-        for all to authenticated
-        using (is_facility_owner(facility_id))
-        with check (is_facility_owner(facility_id))
-    $p$;
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'therapists' and column_name = 'facility_id'
+    ) into has_col;
+    if has_col then
+      execute 'drop policy if exists therapists_owner on therapists';
+      execute $p$
+        create policy therapists_owner on therapists
+          for all to authenticated
+          using (is_facility_owner(facility_id))
+          with check (is_facility_owner(facility_id))
+      $p$;
+    else
+      raise notice 'Skipped therapists_owner policy — no facility_id column on therapists';
+    end if;
   end if;
 
   if to_regclass('public.requests') is not null then
-    execute 'drop policy if exists requests_owner on requests';
-    execute $p$
-      create policy requests_owner on requests
-        for all to authenticated
-        using (is_facility_owner(facility_id))
-        with check (is_facility_owner(facility_id))
-    $p$;
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'requests' and column_name = 'facility_id'
+    ) into has_col;
+    if has_col then
+      execute 'drop policy if exists requests_owner on requests';
+      execute $p$
+        create policy requests_owner on requests
+          for all to authenticated
+          using (is_facility_owner(facility_id))
+          with check (is_facility_owner(facility_id))
+      $p$;
+    else
+      raise notice 'Skipped requests_owner policy — no facility_id column on requests. This table stays default-deny (no policy) for authenticated too; it is legacy and superseded by patient_messages, which already has a correct owner-scoped policy from 0007.';
+    end if;
   end if;
 end $$;
 
