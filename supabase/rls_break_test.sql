@@ -15,10 +15,14 @@ where  schemaname = 'public'
   and  ('anon' = any(roles) or '{public}'::name[] && roles);
 -- ↑ 0 rows = PASS.  demo_all (or any USING(true) for anon) would appear here.
 
--- ── TEST 2: `demo_all` is gone everywhere ──────────────────────────────────
--- Expected: ZERO rows.
-select tablename, policyname from pg_policies
-where schemaname = 'public' and policyname = 'demo_all';
+-- ── TEST 2: no policy of ANY name grants `anon` access to these tables ─────
+-- Expected: ZERO rows. (Name-agnostic — do not rely on a specific policy name
+-- like "demo_all"; on this project the open policies had different names.)
+select tablename, policyname, roles::text from pg_policies
+where schemaname = 'public'
+  and tablename in ('facilities','rooms','therapists','requests',
+                    'request_events','device_sessions','leads')
+  and 'anon' = any(roles);
 
 -- ── TEST 3: RLS is enabled on every patient-data table ─────────────────────
 -- Expected: rowsecurity = true for ALL rows.

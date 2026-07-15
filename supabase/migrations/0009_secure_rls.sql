@@ -1,16 +1,20 @@
 -- 0009_secure_rls.sql
 -- ============================================================================
--- CRITICAL SECURITY FIX — remove the world-open `demo_all` policies.
+-- CRITICAL SECURITY FIX — remove every world-open (anon-accessible) policy.
 --
--- Migration 0001 created, for local demo convenience:
---     create policy demo_all on <table> for all to anon, authenticated
---       using (true) with check (true);
--- on facilities, rooms, therapists, requests, request_events, device_sessions,
--- leads. Postgres OR's permissive policies, so as long as demo_all exists, ANY
--- anonymous client can read/write ALL patient data in those tables — the
--- owner-scoped policies added in 0005/0006/0007 are shadowed and meaningless.
+-- Migration 0001 created, for local demo convenience, permissive policies
+-- granting the anon role full read/write on facilities, rooms, therapists,
+-- requests, request_events, device_sessions, leads. Postgres OR's permissive
+-- policies, so as long as ANY such policy exists, anonymous clients can
+-- read/write that table regardless of what other scoped policies exist.
 --
--- This migration drops demo_all everywhere and relies on:
+-- IMPORTANT: on real deployments these policies are not reliably named
+-- `demo_all` — a live check on this project found separate named policies per
+-- table/command (e.g. "demo insert requests", "demo read requests"). This
+-- migration is therefore NAME-AGNOSTIC: it finds and drops every policy that
+-- grants the anon role access to these tables, whatever it's called.
+--
+-- Relies on, after this runs:
 --   • owner/member-scoped policies (0005 rooms, 0006 facilities/members,
 --     0007 patient_messages) for authenticated staff, and
 --   • SECURITY DEFINER RPCs for the anonymous patient paths, which bypass RLS
@@ -27,16 +31,24 @@
 --     Run supabase/rls_break_test.sql to confirm isolation.
 -- ============================================================================
 
--- 1. Drop the permissive demo policies on every operational table.
+-- 1. Drop every policy that grants `anon` any access on the operational
+--    tables, regardless of its name. This is the robust fix — it cannot be
+--    defeated by a differently-named permissive policy.
 do $$
-declare t text;
+declare pol record;
 begin
-  foreach t in array array[
-    'facilities','rooms','therapists','requests',
-    'request_events','device_sessions','leads'
-  ]
+  for pol in
+    select schemaname, tablename, policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename in (
+        'facilities','rooms','therapists','requests',
+        'request_events','device_sessions','leads'
+      )
+      and 'anon' = any(roles)
   loop
-    execute format('drop policy if exists demo_all on %I', t);
+    execute format('drop policy %I on %I.%I', pol.policyname, pol.schemaname, pol.tablename);
+    raise notice 'Dropped anon policy % on %', pol.policyname, pol.tablename;
   end loop;
 end $$;
 
