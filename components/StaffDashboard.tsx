@@ -128,9 +128,11 @@ export default function StaffDashboard({
 
 function Stat({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
-    <div className="rounded-lg border border-gray-muted bg-white p-3 shadow-soft">
+    <div className="rounded-lg border border-gray-muted bg-white p-3 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-panel">
       <p className="text-xs font-medium text-slate/60">{label}</p>
-      <p className={`mt-0.5 text-xl font-bold ${accent ? "text-coral" : "text-navy"}`}>{value}</p>
+      <p className={`mt-0.5 text-xl font-bold tabular-nums ${accent ? "text-coral" : "text-navy"}`} key={String(value)}>
+        <span className="rehub-rise inline-block">{value}</span>
+      </p>
     </div>
   );
 }

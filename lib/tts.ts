@@ -16,6 +16,13 @@
 let primed = false;
 let audioCtx: AudioContext | null = null;
 
+/** Which voice actually spoke the last utterance — lets a caller show a status affordance if it wants one. */
+export type VoiceMode = "natural" | "browser" | "silent";
+let lastVoiceMode: VoiceMode = "silent";
+export function getLastVoiceMode(): VoiceMode {
+  return lastVoiceMode;
+}
+
 export function ttsSupported(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window;
 }
@@ -57,23 +64,39 @@ export function primeTTS(): void {
  */
 export async function speak(text: string): Promise<void> {
   if (!text.trim()) return;
-  if (await tryElevenLabs(text)) return;
+  if (await tryElevenLabs(text)) {
+    lastVoiceMode = "natural";
+    return;
+  }
+  lastVoiceMode = ttsSupported() ? "browser" : "silent";
   speakBrowser(text);
 }
 
-async function tryElevenLabs(text: string): Promise<boolean> {
+/** One attempt at the ElevenLabs request/response call, with a 7s timeout. */
+async function elevenLabsAttempt(text: string): Promise<ArrayBuffer | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 7000);
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 7000);
     const res = await fetch("/api/voice", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
       signal: ctrl.signal,
     });
+    if (!res.ok || !res.headers.get("Content-Type")?.includes("audio")) return null;
+    return await res.arrayBuffer();
+  } finally {
     clearTimeout(timer);
-    if (!res.ok || !res.headers.get("Content-Type")?.includes("audio")) return false;
-    const buf = await res.arrayBuffer();
+  }
+}
+
+/** Retries once on a transient failure (network error, timeout, 5xx) before giving up to the browser fallback. */
+async function tryElevenLabs(text: string): Promise<boolean> {
+  try {
+    let buf = await elevenLabsAttempt(text).catch(() => null);
+    if (!buf) buf = await elevenLabsAttempt(text).catch(() => null);
+    if (!buf) return false;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const Ctx: typeof AudioContext = window.AudioContext ?? (window as any).webkitAudioContext;
     if (!Ctx) return false;

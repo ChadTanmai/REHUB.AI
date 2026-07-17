@@ -7,6 +7,7 @@ import { SiteFooter } from "@/components/SiteNav";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getAuthClient } from "@/lib/auth/supabase-browser";
 import MfaSetup from "@/components/account/MfaSetup";
+import { fetchRecentLogins, deviceLabel, type LoginEvent } from "@/lib/supabase/loginEvents";
 
 type Theme = "light" | "dark" | "system";
 
@@ -29,10 +30,15 @@ export default function SettingsPage() {
   const [pwMsg, setPwMsg] = useState("");
 
   const [notifs, setNotifs] = useState({ email: true, system: true, urgent: true });
+  const [logins, setLogins] = useState<LoginEvent[] | null>(null);
 
   useEffect(() => {
     if (!loading && !signedIn) router.replace("/auth/signin");
   }, [loading, signedIn, router]);
+
+  useEffect(() => {
+    if (signedIn) fetchRecentLogins().then(setLogins);
+  }, [signedIn]);
 
   useEffect(() => {
     // localStorage is a browser-only API — can't read it during SSR/initial
@@ -156,6 +162,23 @@ export default function SettingsPage() {
             </div>
           </Section>
 
+          <Section title="Privacy" desc="Recent sign-in activity on your account.">
+            {logins === null ? (
+              <p className="text-sm text-slate/50">Loading…</p>
+            ) : logins.length === 0 ? (
+              <p className="text-sm text-slate/50">No sign-in history yet.</p>
+            ) : (
+              <div className="space-y-1">
+                {logins.map((l) => (
+                  <div key={l.id} className="flex items-center justify-between border-b border-gray-muted py-2 last:border-0">
+                    <span className="text-sm font-medium text-navy">{deviceLabel(l.userAgent)}</span>
+                    <span className="text-xs text-slate/60">{formatLoginTime(l.occurredAt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
           <Section title="Account" desc="Sign out or manage your session.">
             <div className="space-y-2">
               <button
@@ -177,6 +200,16 @@ export default function SettingsPage() {
       <SiteFooter />
     </>
   );
+}
+
+function formatLoginTime(iso: string): string {
+  const d = new Date(iso);
+  const now = Date.now();
+  const mins = Math.floor((now - d.getTime()) / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function Section({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {

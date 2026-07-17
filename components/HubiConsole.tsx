@@ -48,7 +48,7 @@ export default function HubiConsole({
             className="relative flex max-h-[82vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
 
             {/* Header */}
-            <div className="flex items-center gap-3 border-b border-gray-muted bg-gradient-to-r from-[#0c2740] to-[#1d4ed8] px-5 py-3.5 text-white">
+            <div className="flex items-center gap-3 border-b border-gray-muted bg-navy px-5 py-3.5 text-white">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 text-sm font-black">H</span>
               <div className="flex-1">
                 <p className="text-sm font-bold leading-tight">{HUBI_NAME}</p>
@@ -64,7 +64,7 @@ export default function HubiConsole({
               {([["search", "Search"], ["insights", "Insights"], ["audit", "Audit"]] as [Tab, string][]).map(([t, label]) => (
                 <button key={t} onClick={() => setTab(t)}
                   className={`rounded-t-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                    tab === t ? "bg-white text-navy shadow-[0_-1px_0_#1d4ed8_inset]" : "text-slate/60 hover:text-navy"
+                    tab === t ? "bg-white text-navy shadow-[0_-1px_0_#2f9e9e_inset]" : "text-slate/60 hover:text-navy"
                   }`}>
                   {label}
                 </button>
@@ -122,10 +122,10 @@ function SearchTab({ requests, onSelectRoom, onClose }: {
           onKeyDown={(e) => e.key === "Enter" && run(query)}
           placeholder="Ask Hubi anything about your requests…"
           autoFocus
-          className="flex-1 rounded-xl border border-gray-muted bg-white px-4 py-2.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/40"
+          className="flex-1 rounded-xl border border-gray-muted bg-white px-4 py-2.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/40"
         />
         <button onClick={() => run(query)} disabled={loading}
-          className="rounded-xl bg-gradient-to-r from-[#123a5c] to-[#1d4ed8] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+          className="rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
           {loading ? "…" : "Search"}
         </button>
       </div>
@@ -134,7 +134,7 @@ function SearchTab({ requests, onSelectRoom, onClose }: {
         <div className="mt-3 flex flex-wrap gap-2">
           {examples.map((ex) => (
             <button key={ex} onClick={() => run(ex)}
-              className="rounded-full border border-gray-muted px-3 py-1.5 text-xs font-medium text-slate/70 hover:border-[#1d4ed8]/40 hover:bg-[#1d4ed8]/5 hover:text-[#1d4ed8]">
+              className="rounded-full border border-gray-muted px-3 py-1.5 text-xs font-medium text-slate/70 hover:border-teal/40 hover:bg-teal/5 hover:text-teal">
               {ex}
             </button>
           ))}
@@ -150,8 +150,8 @@ function SearchTab({ requests, onSelectRoom, onClose }: {
 
       {answer && (
         <div className="mt-4">
-          <div className="rounded-xl border border-[#1d4ed8]/15 bg-[#1d4ed8]/5 px-4 py-3">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1d4ed8]/60">Hubi</p>
+          <div className="rounded-xl border border-teal/15 bg-teal/5 px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-teal/60">Hubi</p>
             <p className="mt-0.5 text-sm text-navy">{answer}</p>
           </div>
           <div className="mt-3 space-y-2">
@@ -256,7 +256,7 @@ function InsightsTab({ facilityName, requests }: { facilityName: string; request
       </div>
 
       <button onClick={generate} disabled={loading || stats.total === 0}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#123a5c] to-[#1d4ed8] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-navy px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
         {loading ? "Hubi is analyzing…" : "Generate AI insights"}
       </button>
 
@@ -266,8 +266,8 @@ function InsightsTab({ facilityName, requests }: { facilityName: string; request
         </p>
       )}
       {insights && (
-        <div className="mt-3 rounded-xl border border-[#1d4ed8]/15 bg-[#1d4ed8]/5 p-4">
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#1d4ed8]/60">Hubi insights</p>
+        <div className="mt-3 rounded-xl border border-teal/15 bg-teal/5 p-4">
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-teal/60">Hubi insights</p>
           <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-navy">{insights}</pre>
         </div>
       )}

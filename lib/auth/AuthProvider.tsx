@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import type { User } from "@supabase/supabase-js";
 import { getAuthClient } from "./supabase-browser";
 import { getStore } from "@/lib/store";
+import { logSignIn } from "@/lib/supabase/loginEvents";
 
 const SUPABASE_ENABLED =
   Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
@@ -109,9 +110,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
+      if (event === "SIGNED_IN" && session?.user) {
+        void logSignIn(session.user.id);
+      }
     });
 
     return () => sub.subscription.unsubscribe();

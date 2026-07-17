@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -245,10 +245,21 @@ export default function DashboardPage() {
               {/* Quick stats */}
               {ws && (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <StatCard label="Rooms" value={ws.rooms.length} href="/rooms" />
-                  <StatCard label="Staff" value={ws.therapists.length} href="/facility" />
-                  <StatCard label="Active requests" value={activeRequests.length} href="/command" />
-                  <StatCard label="Urgent" value={urgentCount} href="/command" accent={urgentCount > 0} />
+                  {[
+                    { label: "Rooms", value: ws.rooms.length, href: "/rooms" },
+                    { label: "Staff", value: ws.therapists.length, href: "/facility" },
+                    { label: "Active requests", value: activeRequests.length, href: "/command" },
+                    { label: "Urgent", value: urgentCount, href: "/command", accent: urgentCount > 0 },
+                  ].map((s, i) => (
+                    <motion.div
+                      key={s.label}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.35, ease: EASE, delay: 0.05 * i }}
+                    >
+                      <StatCard {...s} />
+                    </motion.div>
+                  ))}
                 </div>
               )}
 
@@ -317,12 +328,40 @@ function StatCard({ label, value, href, accent }: { label: string; value: number
   return (
     <Link
       href={href}
-      className="rounded-xl border border-gray-muted bg-white p-5 shadow-soft transition-shadow hover:shadow-panel"
+      className="block rounded-xl border border-gray-muted bg-white p-5 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-panel"
     >
       <p className="text-xs font-medium uppercase tracking-wide text-slate/50">{label}</p>
-      <p className={`mt-1 text-3xl font-bold ${accent ? "text-coral" : "text-navy"}`}>{value}</p>
+      <p className={`mt-1 text-3xl font-bold tabular-nums ${accent ? "text-coral" : "text-navy"}`}>
+        <CountUp value={value} />
+      </p>
     </Link>
   );
+}
+
+/** Animates a number counting up to its target whenever the target changes. */
+function CountUp({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = value;
+    if (from === to) return;
+    const duration = 500;
+    const start = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(from + (to - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = to;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+
+  return <>{display}</>;
 }
 
 function NavCard({ icon, label, desc, href, primary }: {

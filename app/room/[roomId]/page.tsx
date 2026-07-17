@@ -2,8 +2,10 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useState } from "react";
 import ResidentRequestPanel from "@/components/ResidentRequestPanel";
 import SafetyNote from "@/components/SafetyNote";
+import EmergencyDisclaimer, { hasAcknowledgedDisclaimer } from "@/components/EmergencyDisclaimer";
 import { Logo } from "@/components/SiteNav";
 import { getStore } from "@/lib/store";
 import { getRoomSession } from "@/lib/session";
@@ -14,6 +16,7 @@ export default function RoomScreen() {
   const roomId = params.roomId;
   const mounted = useMounted();
   useStoreVersion();
+  const [acknowledged, setAcknowledged] = useState(false);
 
   if (!mounted) {
     return <div className="min-h-screen bg-offwhite" />;
@@ -43,8 +46,13 @@ export default function RoomScreen() {
     );
   }
 
+  const showDisclaimer = !acknowledged && !hasAcknowledgedDisclaimer(roomId);
+
   return (
     <div className="flex min-h-screen flex-col bg-offwhite">
+      {showDisclaimer && (
+        <EmergencyDisclaimer roomId={roomId} onAcknowledge={() => setAcknowledged(true)} />
+      )}
       {/* Kiosk header */}
       <header className="border-b border-gray-muted bg-white">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-5 py-4">

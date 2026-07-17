@@ -159,7 +159,7 @@ export default function HubiWidget({
             whileHover={{ scale: 1.06 }}
             whileTap={{ scale: 0.94 }}
             aria-label="Open Hubi assistant"
-            className="fixed bottom-5 right-5 z-[90] flex items-center gap-2.5 rounded-full bg-gradient-to-br from-[#0c2740] via-[#123a5c] to-[#1d4ed8] py-3 pl-3 pr-4 text-white shadow-[0_18px_50px_-12px_rgba(29,78,216,0.65)]"
+            className="fixed bottom-5 right-5 z-[90] flex items-center gap-2.5 rounded-full bg-navy py-3 pl-3 pr-4 text-white shadow-[0_18px_50px_-12px_rgba(16,42,67,0.65)]"
           >
             <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/20" style={{ animationDuration: "2.8s" }} />
@@ -182,7 +182,7 @@ export default function HubiWidget({
             className="fixed bottom-5 right-5 z-[90] flex h-[min(620px,82vh)] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-white/40 bg-white shadow-[0_30px_80px_-20px_rgba(15,34,51,0.55)]"
           >
             {/* Header */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#0c2740] via-[#123a5c] to-[#1d4ed8] px-5 py-4 text-white">
+            <div className="relative overflow-hidden bg-navy px-5 py-4 text-white">
               <div className="absolute -right-6 -top-8 h-28 w-28 rounded-full bg-teal/30 blur-2xl" />
               <div className="relative flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-lg font-black">H</span>
@@ -216,7 +216,7 @@ export default function HubiWidget({
                   className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                     m.role === "user"
-                      ? "rounded-br-md bg-gradient-to-br from-[#123a5c] to-[#1d4ed8] text-white"
+                      ? "rounded-br-md bg-navy text-white"
                       : "rounded-bl-md border border-gray-muted bg-white text-navy"
                   }`}>
                     {m.text}
@@ -227,7 +227,7 @@ export default function HubiWidget({
                 <div className="flex justify-start">
                   <div className="flex gap-1 rounded-2xl rounded-bl-md border border-gray-muted bg-white px-4 py-3">
                     {[0, 1, 2].map((i) => (
-                      <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#1d4ed8]/60" style={{ animationDelay: `${i * 0.15}s` }} />
+                      <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal/60" style={{ animationDelay: `${i * 0.15}s` }} />
                     ))}
                   </div>
                 </div>
@@ -238,7 +238,7 @@ export default function HubiWidget({
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {SUGGESTIONS.map((s) => (
                     <button key={s} onClick={() => ask(s)}
-                      className="rounded-full border border-[#1d4ed8]/25 bg-white px-3 py-1.5 text-xs font-medium text-[#1d4ed8] transition-colors hover:bg-[#1d4ed8]/8">
+                      className="rounded-full border border-teal/25 bg-white px-3 py-1.5 text-xs font-medium text-teal transition-colors hover:bg-teal/8">
                       {s}
                     </button>
                   ))}
@@ -251,7 +251,7 @@ export default function HubiWidget({
               <div className="flex items-end gap-2">
                 <button onClick={toggleMic} aria-label="Talk to Hubi"
                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-                    listening ? "border-coral/40 bg-coral/10 text-coral" : "border-gray-muted text-slate hover:border-[#1d4ed8]/40 hover:bg-[#1d4ed8]/5 hover:text-[#1d4ed8]"
+                    listening ? "border-coral/40 bg-coral/10 text-coral" : "border-gray-muted text-slate hover:border-teal/40 hover:bg-teal/5 hover:text-teal"
                   }`}>
                   {listening ? (
                     <span className="relative flex h-3 w-3">
@@ -268,10 +268,10 @@ export default function HubiWidget({
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(input); } }}
                   rows={1}
                   placeholder={listening ? "Listening…" : "Ask Hubi about ReHub…"}
-                  className="max-h-24 flex-1 resize-none rounded-xl border border-gray-muted bg-offwhite px-3.5 py-2.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/40"
+                  className="max-h-24 flex-1 resize-none rounded-xl border border-gray-muted bg-offwhite px-3.5 py-2.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/40"
                 />
                 <button onClick={() => ask(input)} disabled={!input.trim() || thinking} aria-label="Send"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#123a5c] to-[#1d4ed8] text-white transition-transform hover:scale-105 disabled:opacity-40">
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy text-white transition-transform hover:scale-105 disabled:opacity-40">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               </div>

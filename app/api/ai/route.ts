@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { hubiSystem } from "@/lib/ai/hubi";
 import { sameOriginOk, rateLimit, clientIp } from "@/lib/apiGuard";
+import { redactPHI } from "@/lib/privacyFilter";
 
 /**
  * Hubi — the single secure AI service layer for all of ReHub.
@@ -151,7 +152,7 @@ const TRIAGE_INSTRUCTIONS =
 
 async function runTriage(provider: Provider, body: Record<string, unknown>) {
   const started = Date.now();
-  const text = String(body.text ?? "").slice(0, 1000);
+  const text = redactPHI(String(body.text ?? "").slice(0, 1000));
   const preset = String(body.presetUrgency ?? "Low");
   const memory = String(body.patientContext ?? "").slice(0, 600);
   const userMsg =
@@ -224,7 +225,7 @@ async function runTriage(provider: Provider, body: Record<string, unknown>) {
 
 // ─── Summary ───────────────────────────────────────────────────────────────
 async function runSummary(provider: Provider, body: Record<string, unknown>) {
-  const text = String(body.text ?? "").slice(0, 1500);
+  const text = redactPHI(String(body.text ?? "").slice(0, 1500));
   const summary = await complete(provider, {
     system: hubiSystem("Summarize a patient nurse-call request for staff in one neutral, factual sentence. No preamble."),
     user: text, maxTokens: 200,
@@ -234,7 +235,7 @@ async function runSummary(provider: Provider, body: Record<string, unknown>) {
 
 // ─── Converse (patient clarifier) ──────────────────────────────────────────
 async function runConverse(provider: Provider, body: Record<string, unknown>) {
-  const text = String(body.text ?? "").slice(0, 1000);
+  const text = redactPHI(String(body.text ?? "").slice(0, 1000));
   const reply = await complete(provider, {
     system: hubiSystem(
       "The patient just sent a request to staff. Ask ONE short, gentle clarifying question that would " +
@@ -297,7 +298,7 @@ async function runCopilot(provider: Provider, body: Record<string, unknown>) {
 
 // ─── Ask (patient assistant — no nurse notification) ───────────────────────
 async function runAsk(provider: Provider, body: Record<string, unknown>) {
-  const question = String(body.question ?? "").slice(0, 400);
+  const question = redactPHI(String(body.question ?? "").slice(0, 400));
   const patientName = String(body.patientName ?? "");
   const roomNumber = String(body.roomNumber ?? "");
   const facilityName = String(body.facilityName ?? "this facility");

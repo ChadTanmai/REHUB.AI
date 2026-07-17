@@ -277,7 +277,7 @@ export default function GlobalCommandCenter() {
                 <span className="text-sm font-bold text-navy">Room {toast.roomNumber}</span>
               </span>
               <span className="mt-0.5 block truncate text-sm text-slate">{toast.preview}</span>
-              <span className="mt-1 block text-xs font-semibold text-[#1d4ed8]">Tap to open command center →</span>
+              <span className="mt-1 block text-xs font-semibold text-teal">Tap to open command center →</span>
             </span>
           </motion.button>
         )}
@@ -294,8 +294,7 @@ export default function GlobalCommandCenter() {
               className="absolute right-0 top-0 flex h-[100dvh] w-[93vw] max-w-[440px] flex-col bg-offwhite shadow-[0_0_80px_-10px_rgba(15,34,51,0.55)]"
             >
               {/* Brand header */}
-              <div className="relative overflow-hidden bg-gradient-to-br from-[#0c2740] via-[#123a5c] to-[#1d4ed8] px-5 py-4 text-white">
-                <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-teal/30 blur-2xl" />
+              <div className="relative overflow-hidden bg-navy px-5 py-4 text-white">
                 <div className="relative flex items-start justify-between">
                   <div>
                     <p className="text-base font-bold tracking-tight">Command center</p>
@@ -368,7 +367,7 @@ export default function GlobalCommandCenter() {
                 {/* Empty state */}
                 {groups.length === 0 && speakers.length === 0 && (
                   <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-teal/30 bg-white/60 px-6 py-14 text-center">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-teal/15 to-[#1d4ed8]/15">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-mint">
                       <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0f7d74" strokeWidth="1.8">
                         <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
@@ -398,11 +397,11 @@ export default function GlobalCommandCenter() {
                 {/* Live activity feed */}
                 {activity.length > 0 && (
                   <section>
-                    <SectionHeader label="Live activity" color="#1d4ed8" />
+                    <SectionHeader label="Live activity" color="#2f9e9e" />
                     <div className="mt-2 space-y-1 rounded-2xl border border-gray-muted bg-white/70 p-3">
                       {activity.map((a, i) => (
                         <div key={i} className="flex items-center gap-2 text-xs text-slate">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#1d4ed8]/50" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-teal/50" />
                           <span className="font-medium text-navy">Room {a.room}</span>
                           <span className="text-slate/60">{a.text}</span>
                           <span className="ml-auto text-slate/35">{timeAgo(new Date(a.t).toISOString())}</span>
@@ -416,7 +415,7 @@ export default function GlobalCommandCenter() {
               {/* Footer */}
               <div className="border-t border-gray-muted bg-white p-3">
                 <Link href="/command" onClick={() => setOpen(false)}
-                  className="flex items-center justify-center rounded-xl bg-gradient-to-r from-[#123a5c] to-[#1d4ed8] px-4 py-3 text-sm font-semibold text-white shadow-soft transition-transform hover:scale-[1.02]">
+                  className="flex items-center justify-center rounded-xl bg-navy px-4 py-3 text-sm font-semibold text-white shadow-soft transition-transform hover:scale-[1.02] hover:bg-[#0c2030]">
                   Open full command center →
                 </Link>
               </div>
@@ -434,7 +433,7 @@ export default function GlobalCommandCenter() {
         onClick={() => setOpen(true)}
         aria-label="Open command center"
         className={`relative flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
-          criticalCount > 0 ? "border-coral/40 bg-coral/10 text-coral" : "border-gray-muted bg-white text-slate hover:border-[#1d4ed8]/40 hover:bg-[#1d4ed8]/5 hover:text-[#1d4ed8]"
+          criticalCount > 0 ? "border-coral/40 bg-coral/10 text-coral" : "border-gray-muted bg-white text-slate hover:border-teal/40 hover:bg-teal/5 hover:text-teal"
         }`}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -443,7 +442,7 @@ export default function GlobalCommandCenter() {
         </svg>
         {active.length > 0 && (
           <span className={`absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${criticalCount > 0 ? "animate-pulse" : ""}`}
-            style={{ background: criticalCount > 0 ? "#dc2626" : "#1d4ed8" }}>
+            style={{ background: criticalCount > 0 ? "#dc2626" : "#2f9e9e" }}>
             {active.length}
           </span>
         )}
@@ -554,14 +553,14 @@ function RequestCard({ req, onAck, onResolve, spring }: {
 
       {/* Assignment */}
       {req.assignedTherapist && (
-        <p className="mt-1 text-xs font-medium text-[#1d4ed8]">Assigned · {req.assignedTherapist}</p>
+        <p className="mt-1 text-xs font-medium text-teal">Assigned · {req.assignedTherapist}</p>
       )}
 
       {/* Action buttons */}
       <div className="mt-3 flex items-center gap-2">
         {req.status === "New" && (
           <button onClick={onAck}
-            className="rounded-lg bg-gradient-to-r from-[#123a5c] to-[#1d4ed8] px-3.5 py-1.5 text-xs font-semibold text-white shadow-soft transition-transform hover:scale-[1.03] active:scale-95">
+            className="rounded-lg bg-navy px-3.5 py-1.5 text-xs font-semibold text-white shadow-soft transition-transform hover:scale-[1.03] hover:bg-[#0c2030] active:scale-95">
             Acknowledge
           </button>
         )}

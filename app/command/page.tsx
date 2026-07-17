@@ -189,7 +189,7 @@ export default function CommandCenterPage() {
         </div>
       )}
       {criticalCount > 0 && (
-        <div className="flex items-center justify-center gap-2 bg-[#dc2626] px-4 py-2 text-sm font-bold text-white animate-pulse">
+        <div className="rehub-urgent flex items-center justify-center gap-2 border-b-2 border-transparent bg-[#dc2626] px-4 py-2 text-sm font-bold text-white">
           <span className="h-2 w-2 rounded-full bg-white" />
           {criticalCount} CRITICAL request{criticalCount !== 1 ? "s" : ""} need immediate attention
         </div>
@@ -203,12 +203,12 @@ export default function CommandCenterPage() {
           </div>
           <div className="space-y-2 border-b border-gray-muted p-3">
             <button onClick={() => setHubiOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#1d4ed8]/25 bg-[#1d4ed8]/8 px-3 py-2 text-xs font-bold text-[#1d4ed8] transition-colors hover:bg-[#1d4ed8]/15">
-              <span className="flex h-4 w-4 items-center justify-center rounded bg-[#1d4ed8] text-[9px] font-black text-white">H</span>
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-teal/25 bg-teal/8 px-3 py-2 text-xs font-bold text-teal transition-colors hover:bg-teal/15">
+              <span className="flex h-4 w-4 items-center justify-center rounded bg-teal text-[9px] font-black text-white">H</span>
               Ask Hubi · search · insights
             </button>
             <button onClick={generateReport} disabled={reportLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#123a5c] to-[#1d4ed8] px-3 py-2 text-xs font-semibold text-white shadow-soft transition-transform hover:scale-[1.02] disabled:opacity-50">
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white shadow-soft transition-transform hover:scale-[1.02] disabled:opacity-50">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13h6M9 17h6" strokeLinecap="round"/></svg>
               {reportLoading ? "Generating…" : "AI shift report"}
             </button>
@@ -217,7 +217,9 @@ export default function CommandCenterPage() {
             className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm ${selectedRoom === "all" ? "bg-navy/5 font-semibold text-navy" : "text-slate hover:bg-offwhite"}`}>
             <span>All rooms</span>
             {allActive.length > 0 && (
-              <span className="rounded-full bg-navy px-2 py-0.5 text-xs font-bold text-white">{allActive.length}</span>
+              <span key={allActive.length} className="rehub-rise rounded-full bg-navy px-2 py-0.5 text-xs font-bold text-white">
+                {allActive.length}
+              </span>
             )}
           </button>
           <div className="divide-y divide-gray-muted">
@@ -277,7 +279,23 @@ export default function CommandCenterPage() {
                         {req.transcript || req.aiSummary || req.notes || `${req.requestType} request`}
                       </p>
                       {req.triageReason && (
-                        <p className="mt-1 text-xs text-slate/50">{req.triageReason}</p>
+                        <p className="mt-1 text-xs text-slate/50">
+                          {req.triageReason}
+                          {typeof req.aiConfidence === "number" && (
+                            <span className="ml-1.5 font-medium text-slate/70">
+                              · {Math.round(req.aiConfidence * 100)}% confidence
+                            </span>
+                          )}
+                        </p>
+                      )}
+                      {req.detectedKeywords.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {req.detectedKeywords.slice(0, 6).map((kw) => (
+                            <span key={kw} className="rounded-full bg-offwhite px-2 py-0.5 text-[10px] font-medium text-slate/60">
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
                     <span className="shrink-0 rounded-full bg-offwhite px-2 py-0.5 text-xs font-medium text-slate/60">

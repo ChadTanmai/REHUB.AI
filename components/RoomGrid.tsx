@@ -77,7 +77,7 @@ export default function RoomGrid({
             onClick={() =>
               s.lastRequest && onSelectRoom?.(s.lastRequest.id)
             }
-            className={`overflow-hidden rounded-lg border border-gray-muted text-left shadow-soft transition-shadow hover:shadow-panel ${s.bg}`}
+            className={`overflow-hidden rounded-lg border border-gray-muted text-left shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-panel ${s.bg}`}
           >
             <div className={`h-1.5 w-full ${s.strip}`} />
             <div className="p-3">

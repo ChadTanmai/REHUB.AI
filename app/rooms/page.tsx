@@ -343,13 +343,15 @@ export default function RoomsPage() {
               const pct = Math.min(1, count / cap);
               return (
                 <div key={room.id}
-                  className="group rounded-2xl border border-gray-muted bg-white p-4 shadow-soft transition-shadow hover:shadow-panel">
+                  className="group rounded-2xl border border-gray-muted bg-white p-4 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-panel">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-lg font-bold text-navy">{room.name ?? `Room ${room.roomNumber}`}</p>
                       <p className="text-sm font-medium text-slate/50">#{room.roomNumber}</p>
                     </div>
-                    <RoomStatusBadge status={status} />
+                    <span key={status} className="rehub-rise">
+                      <RoomStatusBadge status={status} />
+                    </span>
                   </div>
 
                   <div className="mt-3 flex items-center gap-3 text-xs text-slate/60">

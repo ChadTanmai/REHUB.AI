@@ -46,7 +46,10 @@ export default function RequestConfirmation({
         </div>
       </div>
 
-      {request.safetyFlag && <SafetyNote variant="emergency" className="mt-4 text-left" />}
+      <SafetyNote
+        variant={request.safetyFlag ? "emergency" : "compact"}
+        className="mt-4 text-left"
+      />
 
       <button
         type="button"

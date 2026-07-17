@@ -59,6 +59,24 @@ export default function RequestRow({
             )}
           </div>
           <p className="mt-1 text-sm text-slate/80">{request.aiSummary}</p>
+          {selected && request.triageReason && (
+            <div className="mt-2 rounded-lg bg-offwhite p-2.5">
+              <p className="text-xs text-slate/70">
+                {request.triageReason}
+                {" · "}
+                <span className="font-semibold">{Math.round(request.aiConfidence * 100)}% confidence</span>
+              </p>
+              {request.detectedKeywords.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {request.detectedKeywords.slice(0, 6).map((kw) => (
+                    <span key={kw} className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate/60">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col items-end gap-1.5">

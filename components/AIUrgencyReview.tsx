@@ -37,6 +37,13 @@ export default function AIUrgencyReview({
         <SafetyNote variant="emergency" className="mt-4" />
       )}
 
+      {classification.confidence < 0.55 && (
+        <div className="mt-4 rounded-lg border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-navy">
+          I may have misunderstood — please check this is right, or edit it to
+          say exactly what you need. You can also use a quick button instead.
+        </div>
+      )}
+
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <button
           type="button"

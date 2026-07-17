@@ -35,6 +35,7 @@ import {
   recentUnresolvedCount,
 } from "./requestUtils";
 import { sanitizeField, sanitizeText } from "./security";
+import { redactPHI } from "./privacyFilter";
 import {
   dbCreateFacility,
   dbUpsertRoom,
@@ -675,7 +676,7 @@ class RehubStore {
     const ws = this.ensureFacility(input.facilityId);
     const room = ws.rooms.find((r) => r.id === input.roomId);
 
-    const cleanText = input.text ? sanitizeText(input.text) : undefined;
+    const cleanText = input.text ? redactPHI(sanitizeText(input.text)) : undefined;
     const recent = recentUnresolvedCount(ws.requests, input.roomId);
     const classification = classifyRequest(cleanText ?? "", {
       fixedType: input.fixedType,
