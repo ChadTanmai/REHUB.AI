@@ -185,6 +185,11 @@ function buildStaffNote(
   };
 
   let note = byType[type];
+  // Multiple quick-select buttons pressed together (comma-joined labels) —
+  // keep the primary classification but don't drop the rest of what was asked.
+  if (type !== "Custom" && trimmed.includes(",")) {
+    note += ` Selected: "${trimmed}".`;
+  }
   if (safetyFlag) {
     note += " Possible safety concern — review promptly.";
   }

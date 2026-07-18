@@ -685,7 +685,11 @@ class RehubStore {
     });
 
     const { staffSummary, patientConfirmation } = buildSummary({
-      transcript: input.source === "Button" ? undefined : cleanText,
+      // Multi-select quick-request buttons pass combined text (e.g. "Water, Pain")
+      // that should reach staff just like a typed/voice transcript would. A bare
+      // single fixedType button press never sets input.text, so cleanText is
+      // already undefined for that case — nothing to strip.
+      transcript: cleanText,
       requestType: classification.requestType,
       priority: classification.priority,
       detectedKeywords: classification.detectedKeywords,
@@ -710,7 +714,7 @@ class RehubStore {
       notes: classification.staffNote,
       aiSummary: staffSummary,
       source: input.source,
-      transcript: input.source === "Button" ? undefined : cleanText,
+      transcript: cleanText,
       aiConfidence: classification.confidence,
       detectedKeywords: classification.detectedKeywords,
       safetyFlag: classification.safetyFlag,

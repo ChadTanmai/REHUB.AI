@@ -40,20 +40,35 @@ export default function RequestButton({
   variant,
   onClick,
   disabled,
+  icon,
+  selected,
 }: {
   label: string;
   variant: ButtonVariant;
   onClick: () => void;
   disabled?: boolean;
+  icon?: React.ReactNode;
+  selected?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`min-h-[64px] w-full rounded-xl px-5 text-lg font-semibold shadow-soft transition-colors disabled:opacity-50 ${VARIANT_CLASSES[variant]}`}
+      aria-pressed={icon ? selected : undefined}
+      className={`relative flex min-h-[88px] w-full flex-col items-center justify-center gap-1.5 rounded-xl px-3 py-3 text-center text-base font-semibold shadow-soft transition-all disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${
+        selected ? "ring-4 ring-navy/70 scale-[0.97]" : ""
+      }`}
     >
-      {label}
+      {selected && (
+        <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-navy text-white">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </span>
+      )}
+      {icon}
+      <span className="leading-tight">{label}</span>
     </button>
   );
 }
