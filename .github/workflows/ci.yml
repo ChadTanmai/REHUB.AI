@@ -26,6 +26,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Test
+        run: npm run test
+
       - name: Build
         # Build succeeds without secrets — Supabase/Anthropic/ElevenLabs are all
         # optional and guarded at runtime.

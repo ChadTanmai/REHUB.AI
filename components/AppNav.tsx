@@ -6,6 +6,7 @@ import { RehubWordmark } from "@/components/RehubLogo";
 import UserMenu from "@/components/UserMenu";
 import FacilityCodeBadge from "@/components/FacilityCodeBadge";
 import GlobalCommandCenter from "@/components/GlobalCommandCenter";
+import SyncStatus from "@/components/SyncStatus";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 /**
@@ -69,6 +70,7 @@ export default function AppNav({
         )}
 
         <div className="ml-auto flex items-center gap-3">
+          {signedIn && <SyncStatus />}
           <FacilityCodeBadge />
           {signedIn && <GlobalCommandCenter />}
           {signedIn ? (

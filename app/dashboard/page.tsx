@@ -11,6 +11,7 @@ import { getStore } from "@/lib/store";
 import { getTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import { isActive } from "@/lib/requestUtils";
+import { computeStats } from "@/lib/analyticsUtils";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -106,6 +107,8 @@ export default function DashboardPage() {
   const hasFacility = Boolean(ws);
   const activeRequests = ws ? ws.requests.filter(isActive) : [];
   const urgentCount = activeRequests.filter((r) => r.priority === "Urgent").length;
+  const pendingCount = activeRequests.filter((r) => r.status === "New").length;
+  const stats = ws ? computeStats(ws.requests) : null;
 
   const firstName = profile?.displayName?.split(" ")[0] ?? profile?.fullName?.split(" ")[0] ?? "there";
 
@@ -244,12 +247,19 @@ export default function DashboardPage() {
             >
               {/* Quick stats */}
               {ws && (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
                   {[
                     { label: "Rooms", value: ws.rooms.length, href: "/rooms" },
                     { label: "Staff", value: ws.therapists.length, href: "/facility" },
                     { label: "Active requests", value: activeRequests.length, href: "/command" },
+                    { label: "Pending review", value: pendingCount, href: "/command", accent: pendingCount > 0 },
                     { label: "Urgent", value: urgentCount, href: "/command", accent: urgentCount > 0 },
+                    {
+                      label: "Avg response",
+                      value: stats?.avgResponseMinutes ?? 0,
+                      display: stats?.avgResponseMinutes != null ? `${stats.avgResponseMinutes}m` : "—",
+                      href: "/facility#analytics",
+                    },
                   ].map((s, i) => (
                     <motion.div
                       key={s.label}
@@ -324,7 +334,7 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ label, value, href, accent }: { label: string; value: number; href: string; accent?: boolean }) {
+function StatCard({ label, value, href, accent, display }: { label: string; value: number; href: string; accent?: boolean; display?: string }) {
   return (
     <Link
       href={href}
@@ -332,7 +342,7 @@ function StatCard({ label, value, href, accent }: { label: string; value: number
     >
       <p className="text-xs font-medium uppercase tracking-wide text-slate/50">{label}</p>
       <p className={`mt-1 text-3xl font-bold tabular-nums ${accent ? "text-coral" : "text-navy"}`}>
-        <CountUp value={value} />
+        {display ?? <CountUp value={value} />}
       </p>
     </Link>
   );
