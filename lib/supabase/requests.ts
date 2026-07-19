@@ -196,15 +196,16 @@ export async function updateRequestStatus(
   }
 }
 
-/** Nurse-side: persist AI-enriched triage (urgency/reason/action/summary). */
+/** Nurse-side: persist AI-enriched triage (urgency/category/reason/action). */
 export async function updateRequestTriage(
   id: string,
-  patch: { urgencyLevel?: string; triageReason?: string; suggestedAction?: string },
+  patch: { urgencyLevel?: string; requestType?: string; triageReason?: string; suggestedAction?: string },
 ): Promise<boolean> {
   try {
     const supabase = getAuthClient();
     const row: Record<string, unknown> = {};
     if (patch.urgencyLevel) row.urgency_level = patch.urgencyLevel;
+    if (patch.requestType) row.request_type = patch.requestType;
     if (patch.triageReason) row.triage_reason = patch.triageReason;
     if (patch.suggestedAction) row.suggested_action = patch.suggestedAction;
     if (Object.keys(row).length === 0) return true;

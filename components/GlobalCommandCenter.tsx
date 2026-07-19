@@ -105,9 +105,13 @@ export default function GlobalCommandCenter() {
     toastTimer.current = setTimeout(() => setToast(null), 5500);
   }
 
-  // Smarter triage: ask Claude to re-read the patient's words. Safety-biased —
-  // we only ever RAISE urgency (never silently downgrade the deterministic
-  // result), and always enrich the reason/action/summary. No-ops without a key.
+  // Smarter triage: ask Claude to re-read the patient's words for every
+  // free-text request (voice/typed/multi-select — a single-tap button press
+  // already has an exact category and skips this). Safety-biased — urgency
+  // only ever gets RAISED, never silently downgraded — and the category
+  // (requestType), reason, action, and summary are all AI-refined, not
+  // frozen at whatever the offline keyword matcher guessed at submission.
+  // No-ops without an ANTHROPIC_API_KEY configured.
   async function enrichWithAI(reqId: string) {
     if (!facilityId || aiTriaged.current.has(reqId)) return;
     aiTriaged.current.add(reqId);
@@ -124,12 +128,14 @@ export default function GlobalCommandCenter() {
     const finalUrgency = raised ? ai.urgencyLevel : current;
     store.applyAiTriage(facilityId, reqId, {
       urgencyLevel: finalUrgency,
+      requestType: ai.requestType,
       triageReason: ai.triageReason,
       suggestedAction: ai.suggestedAction,
       aiSummary: ai.summary,
     });
     updateRequestTriage(reqId, {
       urgencyLevel: finalUrgency,
+      requestType: ai.requestType,
       triageReason: ai.triageReason,
       suggestedAction: ai.suggestedAction,
     }).catch(() => {});

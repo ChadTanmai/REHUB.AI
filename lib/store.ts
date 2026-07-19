@@ -14,18 +14,19 @@
 
 "use client";
 
-import type {
-  ActorType,
-  EventType,
-  Facility,
-  FacilityWorkspace,
-  Request,
-  RequestEvent,
-  RequestSource,
-  RequestType,
-  Room,
-  Status,
-  Therapist,
+import {
+  REQUEST_TYPES,
+  type ActorType,
+  type EventType,
+  type Facility,
+  type FacilityWorkspace,
+  type Request,
+  type RequestEvent,
+  type RequestSource,
+  type RequestType,
+  type Room,
+  type Status,
+  type Therapist,
 } from "./types";
 import { classifyRequest } from "./aiClassifier";
 import { buildSummary } from "./aiSummary";
@@ -888,11 +889,17 @@ class RehubStore {
     return changed;
   }
 
-  /** Apply AI-enriched triage to a request (urgency/reason/action/summary). */
+  /** Apply AI-enriched triage to a request (urgency/category/reason/action/summary). */
   applyAiTriage(
     facilityId: string,
     requestId: string,
-    patch: { urgencyLevel?: import("./types").UrgencyLevel; triageReason?: string; suggestedAction?: string; aiSummary?: string },
+    patch: {
+      urgencyLevel?: import("./types").UrgencyLevel;
+      requestType?: string;
+      triageReason?: string;
+      suggestedAction?: string;
+      aiSummary?: string;
+    },
   ): Request | null {
     const ws = this.ensureFacility(facilityId);
     const req = ws.requests.find((r) => r.id === requestId);
@@ -900,6 +907,11 @@ class RehubStore {
     if (patch.urgencyLevel) {
       req.urgencyLevel = patch.urgencyLevel;
       if (patch.urgencyLevel === "Critical") req.safetyFlag = true;
+    }
+    // Only accept a category the app actually knows how to display/filter by —
+    // guards against a malformed or off-enum response reaching the UI.
+    if (patch.requestType && (REQUEST_TYPES as string[]).includes(patch.requestType)) {
+      req.requestType = patch.requestType as RequestType;
     }
     if (patch.triageReason) req.triageReason = patch.triageReason;
     if (patch.suggestedAction) req.suggestedAction = patch.suggestedAction;

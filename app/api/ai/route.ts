@@ -124,31 +124,43 @@ function extractJson(raw: string): string {
 }
 
 // ─── Triage (structured, safety-biased) ────────────────────────────────────
+// Must mirror lib/types.ts REQUEST_TYPES — this route runs server-side only
+// and stays free of app imports by design (see file header), so the list is
+// duplicated here rather than shared.
+const REQUEST_TYPE_ENUM = [
+  "Help", "Pain", "Bathroom", "Water", "Food", "Mobility", "Medication Question", "Custom",
+] as const;
+
 const TRIAGE_SCHEMA = {
   type: "object",
   properties: {
     urgencyLevel: { type: "string", enum: ["Critical", "High", "Medium", "Low", "Informational"] },
-    requestType: { type: "string" },
+    requestType: { type: "string", enum: REQUEST_TYPE_ENUM },
     triageReason: { type: "string" },
     suggestedAction: { type: "string" },
     summary: { type: "string" },
     confidence: { type: "number" },
   },
-  required: ["urgencyLevel", "triageReason", "suggestedAction", "summary"],
+  required: ["urgencyLevel", "requestType", "triageReason", "suggestedAction", "summary"],
   additionalProperties: false,
 } as const;
 
 const TRIAGE_INSTRUCTIONS =
-  "Classify a patient's request into an urgency level for the nursing staff. " +
+  "Classify a patient's request into an urgency level AND a request type for the nursing staff. " +
   "SAFETY FIRST: when uncertain, round UP, never down. A deterministic safety engine has already " +
   "rated this request and that rating is a FLOOR — you may RAISE the level but you must NEVER return " +
   "a level below it. Treat any sign of breathing difficulty, chest pain, fall, stroke symptoms (face " +
-  "droop, slurred speech, weakness), severe bleeding, choking, seizure, or loss of consciousness as " +
-  "Critical. 'High' = urgent pain, can't-move/immobility, medication needs, dizziness, or distress. " +
-  "'Medium' = comfort/mobility needs (water, bathroom, repositioning, generic help). 'Low' = minor " +
-  "comfort (blanket, TV, light). Keep triageReason to one short clinical sentence; suggestedAction to " +
-  "a short imperative for the nurse; summary to a brief neutral paraphrase. Provide confidence 0..1. " +
-  "Never invent symptoms the patient did not state.";
+  "droop, slurred speech, weakness, sudden numbness), severe bleeding, choking, seizure, overdose, " +
+  "diabetic emergency, or loss of consciousness as Critical. 'High' = urgent pain, can't-move/" +
+  "immobility, medication needs, dizziness, or distress. 'Medium' = comfort/mobility needs (water, " +
+  "bathroom, repositioning, generic help). 'Low' = minor comfort (blanket, TV, light). " +
+  "requestType MUST be exactly one of: Help, Pain, Bathroom, Water, Food, Mobility, " +
+  "\"Medication Question\", Custom — pick the single closest match to the patient's primary need " +
+  "(e.g. a fall or breathing complaint is 'Help', a medication timing question is " +
+  "'Medication Question'); use Custom only when nothing else clearly fits, and never invent a new " +
+  "category. Keep triageReason to one short clinical sentence; suggestedAction to a short imperative " +
+  "for the nurse; summary to a brief neutral paraphrase. Provide confidence 0..1. Never invent " +
+  "symptoms the patient did not state.";
 
 async function runTriage(provider: Provider, body: Record<string, unknown>) {
   const started = Date.now();
@@ -184,12 +196,19 @@ async function runTriage(provider: Provider, body: Record<string, unknown>) {
       const raw = await orChat(
         system +
         '\n\nRespond with ONLY valid JSON: {"urgencyLevel":"Critical|High|Medium|Low|Informational",' +
-        '"requestType":"string","triageReason":"one clinical sentence","suggestedAction":"short imperative",' +
+        `"requestType":"${REQUEST_TYPE_ENUM.join("|")}",` +
+        '"triageReason":"one clinical sentence","suggestedAction":"short imperative",' +
         '"summary":"brief neutral paraphrase","confidence":0.0}',
         userMsg, 400, true,
       );
       model = OPENROUTER_MODEL;
       parsed = JSON.parse(extractJson(raw));
+    }
+
+    // OpenRouter (or a malformed response) could still hand back something
+    // outside the enum — never let an invalid category reach the store.
+    if (!REQUEST_TYPE_ENUM.includes(parsed.requestType as typeof REQUEST_TYPE_ENUM[number])) {
+      delete parsed.requestType;
     }
 
     // ── Layer 4: enforce the deterministic floor server-side ──────────────────
@@ -213,7 +232,9 @@ async function runTriage(provider: Provider, body: Record<string, unknown>) {
       available: true,
       model: modelFor(provider),
       urgencyLevel: preset,
-      requestType: "Help",
+      // No requestType here on purpose — a transient AI failure must never
+      // overwrite the deterministic classifier's category. applyAiTriage()
+      // only touches requestType when one is actually present in the patch.
       triageReason: "AI triage unavailable — using the deterministic safety rating.",
       suggestedAction: SAFE_ACTION[preset] ?? "Send a staff member to assist.",
       summary: text.slice(0, 120),
