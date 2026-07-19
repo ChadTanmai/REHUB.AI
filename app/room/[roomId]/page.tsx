@@ -6,7 +6,7 @@ import { useState } from "react";
 import ResidentRequestPanel from "@/components/ResidentRequestPanel";
 import SafetyNote from "@/components/SafetyNote";
 import EmergencyDisclaimer, { hasAcknowledgedDisclaimer } from "@/components/EmergencyDisclaimer";
-import { Logo } from "@/components/SiteNav";
+import { RehubMark } from "@/components/RehubLogo";
 import { getStore } from "@/lib/store";
 import { getRoomSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
@@ -57,7 +57,7 @@ export default function RoomScreen() {
       <header className="border-b border-gray-muted bg-white">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-5 py-4">
           <div className="flex items-center gap-2">
-            <Logo />
+            <RehubMark size={28} animated />
             <span className="text-lg font-bold text-navy">Rehub</span>
           </div>
           <div className="flex items-center gap-2 text-sm font-medium text-teal">

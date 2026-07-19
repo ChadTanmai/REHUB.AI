@@ -15,6 +15,10 @@ describe("triage — critical safety phrases", () => {
     "I think I'm having a stroke",
     "having a seizure right now",
     "I want to end my life",
+    "I can't feel my leg",
+    "I'm coughing up blood",
+    "I think I took too many pills",
+    "my blood sugar is low and I'm shaking and sweating",
   ];
 
   for (const phrase of critical) {

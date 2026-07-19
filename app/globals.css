@@ -53,6 +53,15 @@ body {
   }
 }
 
+/* Slow heartbeat pulse for the logo's hub node — transform-box is required
+   because the default SVG transform origin is the viewport corner, not the
+   circle's own center. */
+.rehub-mark-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rehub-breathe 2.6s ease-in-out infinite;
+}
+
 .rehub-breathe {
   animation: rehub-breathe 3.4s ease-in-out infinite;
 }
@@ -130,7 +139,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .rehub-breathe,
   .rehub-rise,
-  .rehub-urgent {
+  .rehub-urgent,
+  .rehub-mark-pulse {
     animation: none;
   }
 }

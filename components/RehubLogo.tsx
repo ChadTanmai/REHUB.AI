@@ -5,7 +5,16 @@
  * dashboard) and a subtle heartbeat/care signal. No clipart, no emoji.
  */
 
-export function RehubMark({ size = 28 }: { size?: number }) {
+export function RehubMark({
+  size = 28,
+  animated = false,
+}: {
+  size?: number;
+  /** Gives the hub node a slow, subtle heartbeat pulse — the mark already
+   *  reads as a "care signal"; this makes that literal without adding any
+   *  new visual language (reuses the existing rehub-breathe keyframe). */
+  animated?: boolean;
+}) {
   return (
     <svg
       width={size}
@@ -28,7 +37,13 @@ export function RehubMark({ size = 28 }: { size?: number }) {
       {/* Node dots */}
       <circle cx="8" cy="20" r="2.2" fill="#D9F0E5" />
       <circle cx="13" cy="14" r="2.2" fill="#D9F0E5" />
-      <circle cx="19" cy="18" r="2.2" fill="#2F9E9E" />
+      <circle
+        cx="19"
+        cy="18"
+        r="2.2"
+        fill="#2F9E9E"
+        className={animated ? "rehub-mark-pulse" : undefined}
+      />
       <circle cx="24" cy="12" r="2.2" fill="#D9F0E5" />
     </svg>
   );

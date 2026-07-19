@@ -15,7 +15,11 @@ import {
 } from "@/lib/supabase/requests";
 import { aiHandoff } from "@/lib/ai/client";
 import HubiConsole from "@/components/HubiConsole";
+import HandoffBriefLoading from "@/components/HandoffBriefLoading";
 import { openShiftReportPdf } from "@/lib/shiftReport";
+
+/** Minimum time the loading checklist stays up, so it's never a single-frame flash. */
+const MIN_REPORT_LOADING_MS = 1400;
 
 function urgencyOf(r: Request): UrgencyLevel {
   return r.urgencyLevel ?? (r.priority === "Urgent" ? "High" : r.priority === "Important" ? "Medium" : "Low");
@@ -139,7 +143,8 @@ export default function CommandCenterPage() {
       createdAt: r.createdAt, acknowledgedBy: r.acknowledgedBy,
       responseTimeMinutes: r.responseTimeMinutes,
     }));
-    const res = await aiHandoff(ws.facility.name, rows);
+    const minDelay = new Promise((resolve) => setTimeout(resolve, MIN_REPORT_LOADING_MS));
+    const [res] = await Promise.all([aiHandoff(ws.facility.name, rows), minDelay]);
     setReportLoading(false);
     // Analytics + layout come from real data; the AI narrative is the prose
     // section. If AI is unavailable, still produce the PDF with a deterministic
@@ -169,13 +174,13 @@ export default function CommandCenterPage() {
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-navy/40 p-4" onClick={() => { setReport(null); setReportUnavailable(false); }}>
           <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-navy">Shift handoff report</h2>
+              <h2 className="text-lg font-bold text-navy">Handoff Brief</h2>
               <button onClick={() => { setReport(null); setReportUnavailable(false); }} className="text-slate hover:text-navy">✕</button>
             </div>
-            {reportLoading && <p className="py-8 text-center text-sm text-slate/60">Generating report with AI…</p>}
+            {reportLoading && <HandoffBriefLoading />}
             {reportUnavailable && (
               <p className="rounded-xl bg-amber/10 px-4 py-3 text-sm text-amber">
-                AI isn&apos;t configured yet. Add <code>ANTHROPIC_API_KEY</code> in Vercel to enable AI shift reports.
+                AI isn&apos;t configured yet. Add <code>ANTHROPIC_API_KEY</code> in Vercel to enable the Handoff Brief.
               </p>
             )}
             {report && <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate">{report}</pre>}
@@ -210,7 +215,7 @@ export default function CommandCenterPage() {
             <button onClick={generateReport} disabled={reportLoading}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white shadow-soft transition-transform hover:scale-[1.02] disabled:opacity-50">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13h6M9 17h6" strokeLinecap="round"/></svg>
-              {reportLoading ? "Generating…" : "AI shift report"}
+              {reportLoading ? "Generating…" : "Handoff Brief"}
             </button>
           </div>
           <button onClick={() => setSelectedRoom("all")}

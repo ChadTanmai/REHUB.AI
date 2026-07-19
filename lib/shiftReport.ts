@@ -147,7 +147,7 @@ export function openShiftReportPdf(facilityName: string, requests: Request[], ai
 
   const narrativeHtml = renderNarrative(aiNarrative);
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ReHub Shift Report — ${esc(facilityName)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>ReHub Handoff Brief — ${esc(facilityName)}</title>
 <style>
   :root{--navy:#102a43;--teal:#2f9e9e;--mint:#d9f0e5;--offwhite:#f7f4ef;--slate:#334e68;--muted:#d9e2ec;--coral:#d95d4f;--amber:#f0b429;--success:#2f855a;--soft:#62748a;}
   *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
@@ -220,7 +220,7 @@ export function openShiftReportPdf(facilityName: string, requests: Request[], ai
         <span class="glyph"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2f9e9e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg></span>
         <span class="wm">Re<b>Hub</b></span>
       </div>
-      <div class="ttl"><b>Shift Handoff Report</b>${esc(facilityName)} · ${esc(generated)}</div>
+      <div class="ttl"><b>Handoff Brief</b>${esc(facilityName)} · ${esc(generated)}</div>
     </div>
 
     <div class="kpis">${kpiHtml}</div>
