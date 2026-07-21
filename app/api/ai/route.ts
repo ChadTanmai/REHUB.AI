@@ -371,19 +371,43 @@ async function runGuide(provider: Provider, body: Record<string, unknown>) {
   const question = String(body.question ?? "").slice(0, 400);
   const pageContext = String(body.pageContext ?? "").slice(0, 300);
   const signedIn = Boolean(body.signedIn);
+
+  // Logged-out visitors are on a public marketing surface — stay strictly
+  // inside the controlled knowledge base so a prospect is never told about a
+  // feature, number, or price that doesn't exist.
+  //
+  // Signed-in staff get a genuinely useful assistant, not a product-FAQ bot:
+  // real care-coordination and facility-operations help (drafting a handoff
+  // note, phrasing something to a worried family member, general workflow or
+  // prioritization questions, how to use any part of ReHub) even when the
+  // exact answer isn't one of the bullets above. The boundary that stays
+  // fixed either way: never diagnose, never give medical/treatment advice,
+  // never invent ReHub facts, and redirect anything with no connection to
+  // their job at the facility.
+  const instructions = signedIn
+    ? "You are the in-app Hubi assistant for a signed-in care-team member — a knowledgeable colleague, " +
+      "not a scripted FAQ bot. Use the knowledge base above for anything about how ReHub works, but you " +
+      "are not limited to it: help with real day-to-day care-coordination and facility-operations tasks " +
+      "— drafting or tightening a shift handoff note, suggesting how to phrase something to an anxious " +
+      "patient or family member, general triage-prioritization or workflow questions, scheduling/staffing " +
+      "logistics, or explaining a ReHub feature in more depth. Use your own professional judgment for " +
+      "these, don't limit yourself to only restating the knowledge base. Firm boundaries regardless: never " +
+      "diagnose a condition, never give medical/treatment advice or medication guidance, never invent a " +
+      "ReHub feature/number/price that isn't real, and if asked something with no connection to their job " +
+      "or ReHub, say briefly that it's outside what you help with. Answer in 1-4 clear, professional " +
+      "sentences — longer only if genuinely drafting text they asked for (like a note)."
+    : "You are greeting a website visitor exploring ReHub before signing in. Answer in 1-3 warm, clear " +
+      "sentences using ONLY the knowledge base above. If asked something ReHub doesn't cover or that " +
+      "isn't in the knowledge base, briefly say it's outside what you can help with and steer back to " +
+      "how ReHub improves care communication. Never invent features, numbers, pricing, or clinical facts.";
+
   const answer = await complete(provider, {
     system: hubiSystem(
       `${REHUB_KB}\n\n` +
-      (signedIn
-        ? "You are the in-app Hubi assistant for a signed-in care-team member. "
-        : "You are greeting a website visitor who is exploring ReHub before signing in. ") +
       (pageContext ? `The user is currently on: ${pageContext}. Tailor your answer to that context when relevant. ` : "") +
-      "Answer in 1-3 warm, clear, professional sentences using ONLY the knowledge base above. " +
-      "If asked something ReHub doesn't cover or that isn't in the knowledge base, briefly say it's " +
-      "outside what you can help with and steer back to how ReHub improves care communication. " +
-      "Never invent features, numbers, pricing, or clinical facts. Be concise and inviting."),
+      instructions),
     user: question || "Introduce yourself and tell me what ReHub does.",
-    maxTokens: 220,
+    maxTokens: signedIn ? 400 : 220,
   });
   return { available: true, model: modelFor(provider), answer };
 }

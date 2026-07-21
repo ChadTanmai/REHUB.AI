@@ -11,19 +11,33 @@ import { getStore } from "@/lib/store";
 import { isActive } from "@/lib/requestUtils";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 export default function FacilityPage() {
   const mounted = useMounted();
   useStoreVersion();
   const router = useRouter();
+  const { profile } = useAuth();
   const [copied, setCopied] = useState<"nurse" | "patient" | null>(null);
+
+  const store = getStore();
+  const session = mounted ? getTherapistSession() : null;
+  // Same resolution as /dashboard and /command: a paired therapist device
+  // session, falling back to the signed-in account's own facility, falling
+  // back to any facility this account owns. A signed-in owner who never
+  // went through therapist device-pairing on this browser previously had no
+  // fallback here and was bounced straight back to /dashboard.
+  const facilityId =
+    mounted && session && store.ownsFacility(session.facilityId)
+      ? session.facilityId
+      : mounted && store.ownsFacility(profile?.facilityId)
+        ? profile!.facilityId!
+        : mounted ? store.listFacilities()[0]?.id ?? null : null;
 
   useEffect(() => {
     if (!mounted) return;
-    // Tenant isolation: require a staff session for a facility this account owns.
-    const s = getTherapistSession();
-    if (!s || !getStore().ownsFacility(s.facilityId)) router.replace("/dashboard");
-  }, [mounted, router]);
+    if (!facilityId) router.replace("/dashboard");
+  }, [mounted, facilityId, router]);
 
   if (!mounted) {
     return (
@@ -35,9 +49,7 @@ export default function FacilityPage() {
     );
   }
 
-  const therapistSession = getTherapistSession();
-  if (!therapistSession || !getStore().ownsFacility(therapistSession.facilityId)) return null;
-  const facilityId = therapistSession.facilityId;
+  if (!facilityId) return null;
   const ws = getStore().getWorkspace(facilityId);
   const active = ws.requests.filter(isActive);
 

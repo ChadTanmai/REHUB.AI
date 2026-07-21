@@ -273,6 +273,25 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {/* Ask Hubi — cross-cutting assistant, not a facility area, so it
+                  gets its own distinct treatment rather than a NavCard slot. */}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event("hubi:open"))}
+                className="group flex w-full items-center gap-4 rounded-xl border border-teal/25 bg-teal/8 p-4 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:bg-teal/12 hover:shadow-panel"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal text-base font-black text-white">H</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-navy">Ask Hubi</span>
+                  <span className="block truncate text-xs text-slate/60">
+                    Draft a handoff note, get a prioritization gut-check, or ask anything about ReHub
+                  </span>
+                </span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0 text-teal transition-transform group-hover:translate-x-0.5" aria-hidden>
+                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+
               {/* Navigation cards */}
               <div className="grid gap-4 sm:grid-cols-3">
                 <NavCard

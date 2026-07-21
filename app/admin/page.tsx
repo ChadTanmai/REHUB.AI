@@ -9,6 +9,7 @@ import EmptyState from "@/components/EmptyState";
 import { getStore } from "@/lib/store";
 import { getTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 function ChartIcon() {
   return (
@@ -21,14 +22,25 @@ function ChartIcon() {
 export default function AdminPage() {
   const mounted = useMounted();
   const router = useRouter();
+  const { profile } = useAuth();
   useStoreVersion();
 
+  const store = getStore();
+  const session = mounted ? getTherapistSession() : null;
+  // Same resolution as /dashboard, /command, /facility: fall back to the
+  // signed-in account's own facility when there's no paired therapist device
+  // session on this browser.
+  const facilityId =
+    mounted && session && store.ownsFacility(session.facilityId)
+      ? session.facilityId
+      : mounted && store.ownsFacility(profile?.facilityId)
+        ? profile!.facilityId!
+        : mounted ? store.listFacilities()[0]?.id ?? null : null;
+
   useEffect(() => {
-    if (mounted) {
-      const session = getTherapistSession();
-      if (!session) router.replace("/dashboard");
-    }
-  }, [mounted, router]);
+    if (!mounted) return;
+    if (!facilityId) router.replace("/dashboard");
+  }, [mounted, facilityId, router]);
 
   if (!mounted) {
     return (
@@ -39,10 +51,9 @@ export default function AdminPage() {
     );
   }
 
-  const session = getTherapistSession();
-  if (!session) return null;
+  if (!facilityId) return null;
 
-  const ws = getStore().getWorkspace(session.facilityId);
+  const ws = getStore().getWorkspace(facilityId);
 
   return (
     <>

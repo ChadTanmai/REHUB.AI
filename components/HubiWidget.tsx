@@ -30,7 +30,7 @@ import { useMounted } from "@/lib/useRehub";
 
 type Msg = { role: "hubi" | "user"; text: string };
 
-const SUGGESTIONS = [
+const PUBLIC_SUGGESTIONS = [
   "What does ReHub do?",
   "How does patient communication work?",
   "What is the command center?",
@@ -38,9 +38,24 @@ const SUGGESTIONS = [
   "How do patients join rooms?",
 ];
 
-const INTRO =
+// Signed-in suggestions showcase that Hubi is a working assistant, not just
+// a product FAQ — drafting help, communication tips, workflow questions.
+const STAFF_SUGGESTIONS = [
+  "Help me write a shift handoff note",
+  "How should I talk to a worried family member?",
+  "What should I prioritize right now?",
+  "How does AI prioritization work?",
+  "How do I invite a new staff member?",
+];
+
+const PUBLIC_INTRO =
   "Hi, I'm Hubi — ReHub's AI care coordinator. I help patients, nurses, therapists, and " +
   "administrators communicate faster and more clearly. Ask me anything about ReHub, or tap the mic and talk to me.";
+
+const STAFF_INTRO =
+  "Hi, I'm Hubi — your care-coordination assistant. Ask me about ReHub, or bring me real work: " +
+  "a handoff note to tighten up, how to phrase something to a family member, prioritization questions, " +
+  "whatever would help right now.";
 
 // Local fallback knowledge base — used only when the AI service is unavailable,
 // so the preview still answers (and only ever about ReHub).
@@ -83,7 +98,9 @@ export default function HubiWidget({
 }) {
   const [open, setOpen] = useState(false);
   const mounted = useMounted();
-  const [messages, setMessages] = useState<Msg[]>([{ role: "hubi", text: INTRO }]);
+  const [messages, setMessages] = useState<Msg[]>([
+    { role: "hubi", text: signedIn ? STAFF_INTRO : PUBLIC_INTRO },
+  ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [listening, setListening] = useState(false);
@@ -95,6 +112,15 @@ export default function HubiWidget({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, thinking]);
+
+  // Lets any page open the floating widget (e.g. a dashboard "Ask Hubi"
+  // card) without prop-drilling through the root layout — dispatch
+  // window.dispatchEvent(new Event("hubi:open")).
+  useEffect(() => {
+    const openHandler = () => { primeTTS(); setOpen(true); };
+    window.addEventListener("hubi:open", openHandler);
+    return () => window.removeEventListener("hubi:open", openHandler);
+  }, []);
 
   async function ask(question: string) {
     const q = question.trim();
@@ -236,7 +262,7 @@ export default function HubiWidget({
               {/* Suggestion chips — only before the first user turn */}
               {messages.length === 1 && !thinking && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {SUGGESTIONS.map((s) => (
+                  {(signedIn ? STAFF_SUGGESTIONS : PUBLIC_SUGGESTIONS).map((s) => (
                     <button key={s} onClick={() => ask(s)}
                       className="rounded-full border border-teal/25 bg-white px-3 py-1.5 text-xs font-medium text-teal transition-colors hover:bg-teal/8">
                       {s}
