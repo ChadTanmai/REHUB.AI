@@ -68,6 +68,43 @@ export function computeStats(requests: Request[], now: number = Date.now()): Adm
   };
 }
 
+export interface SessionStats {
+  requestsHandled: number;
+  avgResponseMinutes: number | null;
+  resolvedCount: number;
+  urgentCount: number;
+}
+
+/**
+ * Personal, per-clinician "this working session" numbers — windowed by
+ * "since I started this session" instead of calendar day. Deliberately the
+ * same derivation shape as computeStats() but never a second source of
+ * truth: it always reads the same shared `requests` list live, just with a
+ * different time boundary, so it can never drift out of sync with the
+ * facility-wide numbers or double-count anything. Resetting a session only
+ * moves `since` forward — it never mutates or duplicates request data.
+ */
+export function computeSessionStats(requests: Request[], since: string): SessionStats {
+  const sinceMs = new Date(since).getTime();
+  const inSession = requests.filter((r) => new Date(r.createdAt).getTime() >= sinceMs);
+  const resolved = inSession.filter(
+    (r) => r.status === "Resolved" && r.responseTimeMinutes != null,
+  );
+  const avgResponseMinutes = resolved.length
+    ? Math.round(
+        (resolved.reduce((s, r) => s + (r.responseTimeMinutes ?? 0), 0) /
+          resolved.length) *
+          10,
+      ) / 10
+    : null;
+  return {
+    requestsHandled: inSession.length,
+    avgResponseMinutes,
+    resolvedCount: resolved.length,
+    urgentCount: inSession.filter((r) => r.priority === "Urgent").length,
+  };
+}
+
 function countBy<T>(items: T[], key: (t: T) => string): Record<string, number> {
   const out: Record<string, number> = {};
   for (const item of items) {

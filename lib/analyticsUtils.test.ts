@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeStats } from "./analyticsUtils";
+import { computeStats, computeSessionStats } from "./analyticsUtils";
 import type { Request } from "./types";
 
 const NOW = new Date("2026-07-21T15:00:00Z").getTime();
@@ -64,5 +64,44 @@ describe("computeStats — avg response time is scoped to today", () => {
     const today = makeRequest({ id: "t1", source: "Voice", createdAt: new Date(NOW).toISOString(), aiConfidence: 0.9 });
     const stats = computeStats([old, today], NOW);
     expect(stats.avgConfidence).toBe(0.9);
+  });
+});
+
+describe("computeSessionStats — windowed by session start, not calendar day", () => {
+  const sessionStart = new Date(NOW - 2 * 3600000).toISOString(); // session began 2h ago
+
+  it("excludes requests from before the session started", () => {
+    const beforeSession = makeRequest({
+      id: "before",
+      createdAt: new Date(NOW - 3 * 3600000).toISOString(), // 3h ago, before session start
+      responseTimeMinutes: 999,
+    });
+    const inSession = makeRequest({
+      id: "in",
+      createdAt: new Date(NOW - 1 * 3600000).toISOString(), // 1h ago, after session start
+      responseTimeMinutes: 5,
+    });
+
+    const stats = computeSessionStats([beforeSession, inSession], sessionStart);
+
+    expect(stats.requestsHandled).toBe(1);
+    expect(stats.avgResponseMinutes).toBe(5);
+  });
+
+  it("is independent of computeStats' 'today' window — a session spanning midnight still counts requests from yesterday", () => {
+    const lateLastNight = makeRequest({
+      id: "late",
+      createdAt: new Date(sessionStart).toISOString(),
+      responseTimeMinutes: 3,
+    });
+    const stats = computeSessionStats([lateLastNight], sessionStart);
+    expect(stats.requestsHandled).toBe(1);
+  });
+
+  it("returns zeroed/null stats for a brand-new session with no activity yet", () => {
+    const stats = computeSessionStats([], new Date(NOW).toISOString());
+    expect(stats.requestsHandled).toBe(0);
+    expect(stats.resolvedCount).toBe(0);
+    expect(stats.avgResponseMinutes).toBeNull();
   });
 });

@@ -30,6 +30,31 @@ import { useMounted } from "@/lib/useRehub";
 
 type Msg = { role: "hubi" | "user"; text: string };
 
+// Conversation history survives a refresh/crash/closed-tab — the one place
+// this widget previously lost state that a "Resume" flow would need back.
+// Capped so it can't grow unbounded in localStorage.
+const CHAT_HISTORY_MAX = 40;
+function chatStorageKey(signedIn: boolean): string {
+  return `rehub:hubi-chat:${signedIn ? "staff" : "public"}`;
+}
+function loadChatHistory(signedIn: boolean): Msg[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(chatStorageKey(signedIn));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function saveChatHistory(signedIn: boolean, messages: Msg[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(chatStorageKey(signedIn), JSON.stringify(messages.slice(-CHAT_HISTORY_MAX)));
+  } catch { /* quota or storage disabled — conversation just won't survive a refresh */ }
+}
+
 const PUBLIC_SUGGESTIONS = [
   "What does ReHub do?",
   "How does patient communication work?",
@@ -98,9 +123,9 @@ export default function HubiWidget({
 }) {
   const [open, setOpen] = useState(false);
   const mounted = useMounted();
-  const [messages, setMessages] = useState<Msg[]>([
-    { role: "hubi", text: signedIn ? STAFF_INTRO : PUBLIC_INTRO },
-  ]);
+  const [messages, setMessages] = useState<Msg[]>(
+    () => loadChatHistory(signedIn) ?? [{ role: "hubi", text: signedIn ? STAFF_INTRO : PUBLIC_INTRO }],
+  );
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [listening, setListening] = useState(false);
@@ -112,6 +137,10 @@ export default function HubiWidget({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, thinking]);
+
+  useEffect(() => {
+    saveChatHistory(signedIn, messages);
+  }, [signedIn, messages]);
 
   // Lets any page open the floating widget (e.g. a dashboard "Ask Hubi"
   // card) without prop-drilling through the root layout — dispatch

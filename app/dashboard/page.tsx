@@ -9,9 +9,14 @@ import { SiteFooter } from "@/components/SiteNav";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getStore } from "@/lib/store";
 import { getTherapistSession } from "@/lib/session";
-import { useMounted, useStoreVersion } from "@/lib/useRehub";
+import { useMounted, useStoreVersion, useNow } from "@/lib/useRehub";
+import type { SessionStats } from "@/lib/analyticsUtils";
 import { isActive } from "@/lib/requestUtils";
-import { computeStats } from "@/lib/analyticsUtils";
+import { computeStats, computeSessionStats } from "@/lib/analyticsUtils";
+import { getSession, hasSession, startSession } from "@/lib/clinicianSession";
+import WelcomeBackGate from "@/components/WelcomeBackGate";
+
+const WELCOME_SHOWN_KEY = "rehub:welcome-shown";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -75,13 +80,44 @@ export default function DashboardPage() {
   const mounted = useMounted();
   useStoreVersion();
   const router = useRouter();
-  const { profile, signedIn, loading } = useAuth();
+  const { user, profile, signedIn, loading } = useAuth();
+  const [gate, setGate] = useState<{ facilityId: string; facilityName: string } | null>(null);
 
   useEffect(() => {
     if (!loading && !signedIn) {
       router.replace("/auth/signin?next=/dashboard");
     }
   }, [loading, signedIn, router]);
+
+  // Decide, once per browser session, whether to show the Welcome Back gate.
+  // First-ever login on this browser has nothing to resume, so it starts a
+  // session silently. A returning clinician sees the gate and chooses.
+  useEffect(() => {
+    if (!mounted || loading || !signedIn || !user || !profile) return;
+    try {
+      if (sessionStorage.getItem(WELCOME_SHOWN_KEY) === "1") return;
+    } catch { /* sessionStorage unavailable — skip the gate, don't block the app */ return; }
+
+    const store = getStore();
+    const session = getTherapistSession();
+    const facilityId =
+      session && store.ownsFacility(session.facilityId)
+        ? session.facilityId
+        : store.ownsFacility(profile.facilityId)
+          ? profile.facilityId!
+          : store.listFacilities()[0]?.id ?? null;
+    if (!facilityId) return;
+
+    if (!hasSession(user.id)) {
+      startSession(user.id, facilityId);
+      try { sessionStorage.setItem(WELCOME_SHOWN_KEY, "1"); } catch { /* ignore */ }
+      return;
+    }
+
+    const facilityName = store.getWorkspace(facilityId).facility.name;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs with localStorage/sessionStorage, see comment above
+    setGate({ facilityId, facilityName });
+  }, [mounted, loading, signedIn, user, profile]);
 
   if (!mounted || loading) {
     return (
@@ -109,11 +145,26 @@ export default function DashboardPage() {
   const urgentCount = activeRequests.filter((r) => r.priority === "Urgent").length;
   const pendingCount = activeRequests.filter((r) => r.status === "New").length;
   const stats = ws ? computeStats(ws.requests) : null;
+  const clinicianSession = user ? getSession(user.id) : null;
+  const sessionStats =
+    ws && clinicianSession ? computeSessionStats(ws.requests, clinicianSession.startedAt) : null;
 
   const firstName = profile?.displayName?.split(" ")[0] ?? profile?.fullName?.split(" ")[0] ?? "there";
 
   return (
     <>
+      {gate && (
+        <WelcomeBackGate
+          userId={user!.id}
+          firstName={firstName}
+          facilityId={gate.facilityId}
+          facilityName={gate.facilityName}
+          onResolved={() => {
+            try { sessionStorage.setItem(WELCOME_SHOWN_KEY, "1"); } catch { /* ignore */ }
+            setGate(null);
+          }}
+        />
+      )}
       <AppNav facilityName={ws?.facility.name ?? profile?.facilityName} />
 
       <main className="flex-1 bg-offwhite">
@@ -273,6 +324,13 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {/* My session — personal, resettable-on-demand numbers, kept
+                  visually and functionally distinct from the shared Quick
+                  stats above so nobody mistakes "my" for "the facility's." */}
+              {sessionStats && clinicianSession && (
+                <MySessionCard stats={sessionStats} startedAt={clinicianSession.startedAt} />
+              )}
+
               {/* Ask Hubi — cross-cutting assistant, not a facility area, so it
                   gets its own distinct treatment rather than a NavCard slot. */}
               <button
@@ -361,6 +419,46 @@ function formatDuration(min: number): string {
   if (totalHours < 24) return `${Math.floor(totalHours)}h ${Math.round(min % 60)}m`;
   const days = totalHours / 24;
   return `${days.toFixed(1)}d`;
+}
+
+/** Live-ticking "h:mm" since a session started. */
+function sessionDuration(startedAt: string, now: number): string {
+  const mins = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 60000));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function MySessionCard({ stats, startedAt }: { stats: SessionStats; startedAt: string }) {
+  const now = useNow(30000);
+  return (
+    <div className="rounded-xl border border-teal/25 bg-teal/5 p-5 shadow-soft">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-navy">My session</h3>
+        <span className="text-xs text-slate/50">Personal — resets only when you choose to</span>
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate/50">Duration</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-navy">{sessionDuration(startedAt, now)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate/50">Requests handled</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-navy">{stats.requestsHandled}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate/50">Resolved</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-navy">{stats.resolvedCount}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate/50">My avg. response</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-navy">
+            {stats.avgResponseMinutes != null ? `${stats.avgResponseMinutes.toFixed(1)}m` : "—"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function StatCard({ label, value, href, accent, display }: { label: string; value: number; href: string; accent?: boolean; display?: string }) {
