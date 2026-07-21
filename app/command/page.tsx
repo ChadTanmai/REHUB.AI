@@ -7,7 +7,7 @@ import { getStore } from "@/lib/store";
 import { getTherapistSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { isActive } from "@/lib/requestUtils";
+import { isActive, formatClock } from "@/lib/requestUtils";
 import { URGENCY_META, type UrgencyLevel, type Request, type Status } from "@/lib/types";
 import {
   fetchFacilityRequestsDiag,
@@ -27,11 +27,34 @@ function urgencyOf(r: Request): UrgencyLevel {
 function rankOf(r: Request): number {
   return URGENCY_META[urgencyOf(r)].rank;
 }
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  return `${Math.floor(s / 3600)}h ago`;
+function dateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/** "Today" / "Yesterday" / "Monday, July 20" — the group header replaces the
+ *  need for "127h ago" style math on every row underneath it. */
+function dateLabel(iso: string, now: number = Date.now()): string {
+  const startOfDay = (t: number) => {
+    const x = new Date(t);
+    return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  };
+  const diffDays = Math.round((startOfDay(now) - startOfDay(new Date(iso).getTime())) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return new Date(iso).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+}
+
+/** Bucket an already-newest-first list into consecutive same-day groups. */
+function groupByDate(requests: Request[]): { key: string; label: string; items: Request[] }[] {
+  const groups: { key: string; label: string; items: Request[] }[] = [];
+  for (const req of requests) {
+    const key = dateKey(req.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(req);
+    else groups.push({ key, label: dateLabel(req.createdAt), items: [req] });
+  }
+  return groups;
 }
 
 function UrgencyPill({ level }: { level: UrgencyLevel }) {
@@ -57,6 +80,9 @@ export default function CommandCenterPage() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportUnavailable, setReportUnavailable] = useState(false);
   const [hubiOpen, setHubiOpen] = useState(false);
+  /** Date-group keys the staff member has manually expanded/collapsed —
+   *  flips the default (Today open, everything else closed) for that key. */
+  const [toggledDates, setToggledDates] = useState<Set<string>>(new Set());
 
   const store = getStore();
   const session = mounted ? getTherapistSession() : null;
@@ -120,6 +146,17 @@ export default function CommandCenterPage() {
   )
     .slice()
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const groupedReqs = groupByDate(visibleReqs);
+
+  function toggleDate(key: string) {
+    setToggledDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   // Priority queue: active requests, urgency desc then oldest first.
   const queue = allActive.slice().sort((a, b) => {
@@ -266,61 +303,92 @@ export default function CommandCenterPage() {
                 <p className="mt-1 text-xs">Patient requests appear here in real time.</p>
               </div>
             )}
-            {visibleReqs.map((req) => {
-              const u = urgencyOf(req);
-              const resolved = req.status === "Resolved";
+            {groupedReqs.map((group) => {
+              const defaultCollapsed = group.label !== "Today";
+              const collapsed = defaultCollapsed !== toggledDates.has(group.key);
               return (
-                <div key={req.id}
-                  className={`rounded-xl border bg-white p-4 shadow-soft ${resolved ? "opacity-60" : ""}`}
-                  style={{ borderLeftWidth: 4, borderLeftColor: URGENCY_META[u].color }}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-navy">Room {req.roomNumber}</span>
-                        <UrgencyPill level={u} />
-                        <span className="text-xs text-slate/40">{timeAgo(req.createdAt)}</span>
-                      </div>
-                      <p className="mt-1.5 text-sm text-slate">
-                        {req.transcript || req.aiSummary || req.notes || `${req.requestType} request`}
-                      </p>
-                      {req.triageReason && (
-                        <p className="mt-1 text-xs text-slate/50">
-                          {req.triageReason}
-                          {typeof req.aiConfidence === "number" && (
-                            <span className="ml-1.5 font-medium text-slate/70">
-                              · {Math.round(req.aiConfidence * 100)}% confidence
-                            </span>
-                          )}
-                        </p>
-                      )}
-                      {req.detectedKeywords.length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {req.detectedKeywords.slice(0, 6).map((kw) => (
-                            <span key={kw} className="rounded-full bg-offwhite px-2 py-0.5 text-[10px] font-medium text-slate/60">
-                              {kw}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <span className="shrink-0 rounded-full bg-offwhite px-2 py-0.5 text-xs font-medium text-slate/60">
-                      {req.status}
+                <div key={group.key}>
+                  <button
+                    onClick={() => toggleDate(group.key)}
+                    className="flex w-full items-center justify-between gap-2 py-1.5"
+                  >
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate/40">
+                      {group.label}
                     </span>
-                  </div>
-                  {!resolved && (
-                    <div className="mt-3 flex gap-2">
-                      {req.status === "New" && (
-                        <button onClick={() => setStatus(req, "Acknowledged")}
-                          className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0c2030]">
-                          Acknowledge
-                        </button>
-                      )}
-                      {req.status !== "Resolved" && (
-                        <button onClick={() => setStatus(req, "Resolved")}
-                          className="rounded-lg border border-gray-muted px-3 py-1.5 text-xs font-semibold text-slate hover:bg-offwhite">
-                          Resolve
-                        </button>
-                      )}
+                    <span className="flex items-center gap-1.5 text-xs text-slate/40">
+                      {group.items.length}
+                      <svg
+                        width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                        className={`transition-transform ${collapsed ? "-rotate-90" : ""}`}
+                        aria-hidden
+                      >
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </span>
+                  </button>
+                  {!collapsed && (
+                    <div className="space-y-3 pb-3">
+                      {group.items.map((req) => {
+                        const u = urgencyOf(req);
+                        const resolved = req.status === "Resolved";
+                        return (
+                          <div key={req.id}
+                            className={`rounded-xl border bg-white p-4 shadow-soft ${resolved ? "opacity-60" : ""}`}
+                            style={{ borderLeftWidth: 4, borderLeftColor: URGENCY_META[u].color }}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-navy">Room {req.roomNumber}</span>
+                                  <UrgencyPill level={u} />
+                                  <span className="text-xs text-slate/40">{formatClock(req.createdAt)}</span>
+                                </div>
+                                <p className="mt-1.5 text-sm text-slate">
+                                  {req.transcript || req.aiSummary || req.notes || `${req.requestType} request`}
+                                </p>
+                                {req.triageReason && (
+                                  <p className="mt-1 text-xs text-slate/50">
+                                    {req.triageReason}
+                                    {typeof req.aiConfidence === "number" && (
+                                      <span className="ml-1.5 font-medium text-slate/70">
+                                        · {Math.round(req.aiConfidence * 100)}% confidence
+                                      </span>
+                                    )}
+                                  </p>
+                                )}
+                                {req.detectedKeywords.length > 0 && (
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {req.detectedKeywords.slice(0, 6).map((kw) => (
+                                      <span key={kw} className="rounded-full bg-offwhite px-2 py-0.5 text-[10px] font-medium text-slate/60">
+                                        {kw}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="shrink-0 rounded-full bg-offwhite px-2 py-0.5 text-xs font-medium text-slate/60">
+                                {req.status}
+                              </span>
+                            </div>
+                            {!resolved && (
+                              <div className="mt-3 flex gap-2">
+                                {req.status === "New" && (
+                                  <button onClick={() => setStatus(req, "Acknowledged")}
+                                    className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0c2030]">
+                                    Acknowledge
+                                  </button>
+                                )}
+                                {req.status !== "Resolved" && (
+                                  <button onClick={() => setStatus(req, "Resolved")}
+                                    className="rounded-lg border border-gray-muted px-3 py-1.5 text-xs font-semibold text-slate hover:bg-offwhite">
+                                    Resolve
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -257,7 +257,7 @@ export default function DashboardPage() {
                     {
                       label: "Avg response",
                       value: stats?.avgResponseMinutes ?? 0,
-                      display: stats?.avgResponseMinutes != null ? `${stats.avgResponseMinutes}m` : "—",
+                      display: stats?.avgResponseMinutes != null ? `${stats.avgResponseMinutes.toFixed(1)}m` : "—",
                       href: "/facility#analytics",
                     },
                   ].map((s, i) => (

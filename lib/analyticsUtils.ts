@@ -33,8 +33,11 @@ export function computeStats(requests: Request[], now: number = Date.now()): Adm
     (r) => r.status === "Resolved" && r.responseTimeMinutes != null,
   );
   const avgResponseMinutes = resolved.length
-    ? resolved.reduce((s, r) => s + (r.responseTimeMinutes ?? 0), 0) /
-      resolved.length
+    ? Math.round(
+        (resolved.reduce((s, r) => s + (r.responseTimeMinutes ?? 0), 0) /
+          resolved.length) *
+          10,
+      ) / 10
     : null;
 
   const typeCounts = countBy(today, (r) => r.requestType);
