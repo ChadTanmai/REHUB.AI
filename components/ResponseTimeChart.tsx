@@ -59,6 +59,9 @@ export default function ResponseTimeChart({
           stroke={color}
           strokeWidth={2}
           fill="url(#rehubFill)"
+          isAnimationActive
+          animationDuration={1000}
+          animationEasing="ease-out"
         />
       </AreaChart>
     </ResponsiveContainer>

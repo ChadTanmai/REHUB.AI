@@ -42,7 +42,13 @@ export default function RequestCategoryChart({
             fontSize: 12,
           }}
         />
-        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+        <Bar
+          dataKey="value"
+          radius={[4, 4, 0, 0]}
+          isAnimationActive
+          animationDuration={900}
+          animationEasing="ease-out"
+        >
           {data.map((_, i) => (
             <Cell key={i} fill={COLORS[i % COLORS.length]} />
           ))}

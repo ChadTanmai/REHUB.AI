@@ -132,6 +132,42 @@ export function volumeByHour(requests: Request[]): NameValue[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Request volume per room — surfaces which rooms generate the most demand. */
+export function requestsByRoom(requests: Request[]): NameValue[] {
+  const counts = countBy(requests, (r) => `Room ${r.roomNumber}`);
+  return Object.entries(counts)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+}
+
+/** Average response time per priority level — the operational question this
+ *  answers: are Urgent requests actually resolved faster than Routine ones? */
+export function avgResponseByPriority(requests: Request[]): NameValue[] {
+  const order: Priority[] = ["Urgent", "Important", "Routine"];
+  const buckets: Record<string, { total: number; count: number }> = {};
+  for (const r of requests) {
+    if (r.status !== "Resolved" || r.responseTimeMinutes == null) continue;
+    buckets[r.priority] = buckets[r.priority] ?? { total: 0, count: 0 };
+    buckets[r.priority].total += r.responseTimeMinutes;
+    buckets[r.priority].count += 1;
+  }
+  return order
+    .filter((p) => buckets[p])
+    .map((p) => ({ name: p, value: Number((buckets[p].total / buckets[p].count).toFixed(1)) }));
+}
+
+/** Resolved-request count per staff member — a workload / accountability view. */
+export function resolvedByStaff(requests: Request[]): NameValue[] {
+  const counts = countBy(
+    requests.filter((r) => r.status === "Resolved" && r.acknowledgedBy),
+    (r) => r.acknowledgedBy!,
+  );
+  return Object.entries(counts)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
 /** Flatten resolved requests into CSV rows for export. */
 export function toCSV(requests: Request[]): string {
   const headers = [

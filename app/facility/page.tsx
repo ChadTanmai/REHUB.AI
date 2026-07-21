@@ -69,6 +69,21 @@ export default function FacilityPage() {
       <main className="flex-1 bg-offwhite">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
 
+          {/* Analytics — first thing you see when Operations opens */}
+          <section id="analytics" className="mb-8 scroll-mt-20">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-navy">Analytics</h2>
+              <p className="text-xs text-slate/50">Ask Hubi for natural-language insights →</p>
+            </div>
+            {ws.requests.length ? (
+              <AdminAnalytics requests={ws.requests} />
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-muted bg-white p-8 text-center text-sm text-slate/60">
+                Analytics appear here once patients start sending requests.
+              </div>
+            )}
+          </section>
+
           {/* Header */}
           <div className="mb-6 rounded-xl border border-gray-muted bg-white p-5 shadow-soft">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -164,21 +179,6 @@ export default function FacilityPage() {
             ) : (
               <div className="rounded-xl border border-dashed border-gray-muted bg-white p-8 text-center text-sm text-slate/60">
                 No care team members yet. Use the invite link above to connect a nurse or therapist.
-              </div>
-            )}
-          </section>
-
-          {/* Analytics — consolidated here so Operations is one focused workspace */}
-          <section id="analytics" className="mt-8 scroll-mt-20">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-navy">Analytics</h2>
-              <p className="text-xs text-slate/50">Ask Hubi for natural-language insights →</p>
-            </div>
-            {ws.requests.length ? (
-              <AdminAnalytics requests={ws.requests} />
-            ) : (
-              <div className="rounded-xl border border-dashed border-gray-muted bg-white p-8 text-center text-sm text-slate/60">
-                Analytics appear here once patients start sending requests.
               </div>
             )}
           </section>

@@ -1,12 +1,16 @@
 "use client";
 
+import { motion } from "framer-motion";
 import type { Request } from "@/lib/types";
 import {
   avgResponseByHour,
+  avgResponseByPriority,
   computeStats,
   requestsByPriority,
+  requestsByRoom,
   requestsByStatus,
   requestsByType,
+  resolvedByStaff,
   voiceVsButton,
   volumeByHour,
 } from "@/lib/analyticsUtils";
@@ -15,6 +19,8 @@ import RequestCategoryChart from "./RequestCategoryChart";
 import ResponseTimeChart from "./ResponseTimeChart";
 import ExportCSVButton from "./ExportCSVButton";
 import PriorityBadge from "./PriorityBadge";
+
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 export default function AdminAnalytics({ requests }: { requests: Request[] }) {
   const stats = computeStats(requests);
@@ -57,24 +63,33 @@ export default function AdminAnalytics({ requests }: { requests: Request[] }) {
       </div>
 
       {/* Charts */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Request Categories">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ChartCard title="Request Categories" index={0}>
           <RequestCategoryChart data={requestsByType(requests)} />
         </ChartCard>
-        <ChartCard title="Average Response Time by Hour">
+        <ChartCard title="Average Response Time by Hour" index={1}>
           <ResponseTimeChart data={avgResponseByHour(requests)} unit=" min" />
         </ChartCard>
-        <ChartCard title="Request Volume Over Time">
+        <ChartCard title="Request Volume Over Time" index={2}>
           <ResponseTimeChart data={volumeByHour(requests)} color="#102A43" />
         </ChartCard>
-        <ChartCard title="Status Breakdown">
+        <ChartCard title="Status Breakdown" index={3}>
           <RequestCategoryChart data={requestsByStatus(requests)} />
         </ChartCard>
-        <ChartCard title="Priority Breakdown">
+        <ChartCard title="Priority Breakdown" index={4}>
           <RequestCategoryChart data={requestsByPriority(requests)} />
         </ChartCard>
-        <ChartCard title="Voice vs Button Requests">
+        <ChartCard title="Voice vs Button Requests" index={5}>
           <RequestCategoryChart data={voiceVsButton(requests)} />
+        </ChartCard>
+        <ChartCard title="Busiest Rooms" index={6}>
+          <RequestCategoryChart data={requestsByRoom(requests)} />
+        </ChartCard>
+        <ChartCard title="Response Time by Priority" index={7}>
+          <RequestCategoryChart data={avgResponseByPriority(requests)} />
+        </ChartCard>
+        <ChartCard title="Resolved per Staff Member" index={8}>
+          <RequestCategoryChart data={resolvedByStaff(requests)} />
         </ChartCard>
       </div>
 
@@ -144,11 +159,16 @@ function Card({ label, value, accent }: { label: string; value: string | number;
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartCard({ title, children, index = 0 }: { title: string; children: React.ReactNode; index?: number }) {
   return (
-    <div className="rounded-lg border border-gray-muted bg-white p-4 shadow-soft">
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: EASE, delay: 0.05 * index }}
+      className="rounded-lg border border-gray-muted bg-white p-4 shadow-soft"
+    >
       <h3 className="mb-3 text-sm font-semibold text-navy">{title}</h3>
       {children}
-    </div>
+    </motion.div>
   );
 }
