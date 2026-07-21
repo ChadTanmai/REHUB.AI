@@ -257,7 +257,7 @@ export default function DashboardPage() {
                     {
                       label: "Avg response",
                       value: stats?.avgResponseMinutes ?? 0,
-                      display: stats?.avgResponseMinutes != null ? `${stats.avgResponseMinutes.toFixed(1)}m` : "—",
+                      display: stats?.avgResponseMinutes != null ? formatDuration(stats.avgResponseMinutes) : "—",
                       href: "/facility#analytics",
                     },
                   ].map((s, i) => (
@@ -351,6 +351,16 @@ export default function DashboardPage() {
       <SiteFooter />
     </>
   );
+}
+
+/** Compact duration for the Avg response KPI card — minutes alone can run to
+ *  5-6 digits on stale/demo data and overflow the card, so scale the unit. */
+function formatDuration(min: number): string {
+  if (min < 60) return `${min.toFixed(1)}m`;
+  const totalHours = min / 60;
+  if (totalHours < 24) return `${Math.floor(totalHours)}h ${Math.round(min % 60)}m`;
+  const days = totalHours / 24;
+  return `${days.toFixed(1)}d`;
 }
 
 function StatCard({ label, value, href, accent, display }: { label: string; value: number; href: string; accent?: boolean; display?: string }) {
