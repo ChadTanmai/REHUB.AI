@@ -29,7 +29,13 @@ function isToday(iso: string, now: number = Date.now()): boolean {
 export function computeStats(requests: Request[], now: number = Date.now()): AdminStats {
   const today = requests.filter((r) => isToday(r.createdAt, now));
 
-  const resolved = requests.filter(
+  // Bug fix: this used to average over every resolved request in the
+  // facility's entire history, not just today's. A single old/stale request
+  // with a huge gap between createdAt and acknowledgedAt (e.g. leftover test
+  // data) would drag the average into meaningless territory (16,000+ minutes)
+  // and never recover, no matter how fast today's requests were actually
+  // handled. Scoped to "today" now, matching every other *Today stat below.
+  const resolved = today.filter(
     (r) => r.status === "Resolved" && r.responseTimeMinutes != null,
   );
   const avgResponseMinutes = resolved.length
@@ -46,7 +52,7 @@ export function computeStats(requests: Request[], now: number = Date.now()): Adm
       | RequestType
       | undefined) ?? "—";
 
-  const confSamples = requests.filter((r) => r.source !== "Button");
+  const confSamples = today.filter((r) => r.source !== "Button");
   const avgConfidence = confSamples.length
     ? confSamples.reduce((s, r) => s + r.aiConfidence, 0) / confSamples.length
     : null;
