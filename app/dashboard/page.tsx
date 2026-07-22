@@ -175,18 +175,21 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: EASE }}
-            className="mb-6"
+            className="mb-6 flex flex-wrap items-start justify-between gap-3"
           >
-            <p className="text-xs font-medium uppercase tracking-wide text-slate/50">{formatDate()}</p>
-            <h1 className="mt-1 text-2xl font-bold text-navy">
-              {timeOfDay()}, {firstName}.
-            </h1>
-            {(ws?.facility.name || profile?.facilityName) && (
-              <p className="mt-0.5 text-sm text-slate/60">
-                {ws?.facility.name ?? profile?.facilityName}
-                {ws && ` · ${ws.rooms.length} rooms · ${ws.therapists.length} staff`}
-              </p>
-            )}
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate/50">{formatDate()}</p>
+              <h1 className="mt-1 text-2xl font-bold text-navy">
+                {timeOfDay()}, {firstName}.
+              </h1>
+              {(ws?.facility.name || profile?.facilityName) && (
+                <p className="mt-0.5 text-sm text-slate/60">
+                  {ws?.facility.name ?? profile?.facilityName}
+                  {ws && ` · ${ws.rooms.length} rooms · ${ws.therapists.length} staff`}
+                </p>
+              )}
+            </div>
+            {ws?.facility.facilityCode && <JoinCodeChip code={ws.facility.facilityCode} />}
           </motion.div>
 
           {/* Urgent alert strip */}
@@ -517,6 +520,44 @@ function NavCard({ icon, label, desc, href, primary }: {
       <p className={`font-semibold ${primary ? "text-white" : "text-navy"}`}>{label}</p>
       <p className={`mt-1 text-xs ${primary ? "text-white/60" : "text-slate/60"}`}>{desc}</p>
     </Link>
+  );
+}
+
+/** Facility join code, front and center on Home — the join links further
+ *  down this page (and on Operations) require more clicks to find; this is
+ *  the fastest path when someone just needs the short code to read aloud or
+ *  hand to a new staff member. */
+function JoinCodeChip({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function copy() {
+    navigator.clipboard.writeText(code).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <button
+      onClick={copy}
+      title="Copy facility join code"
+      className="flex shrink-0 items-center gap-2.5 rounded-xl border border-teal/30 bg-teal/8 px-4 py-2.5 transition-colors hover:bg-teal/15"
+    >
+      <div className="text-left">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-teal/70">Join code</p>
+        <p className="font-mono text-base font-bold tracking-wide text-navy">{code}</p>
+      </div>
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal text-white">
+        {copied ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+          </svg>
+        )}
+      </span>
+    </button>
   );
 }
 
