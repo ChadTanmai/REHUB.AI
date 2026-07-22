@@ -33,6 +33,10 @@ import {
 import { subscribeLiveSpeaking, type LiveSpeakingPayload } from "@/lib/supabase/liveChannel";
 import { aiTriage, aiCopilot } from "@/lib/ai/client";
 import { buildPatientMemory } from "@/lib/ai/memory";
+import { upsertFacilityFromStore, upsertRoom } from "@/lib/supabase/facilities";
+import { SUPABASE_ENABLED } from "@/lib/supabase";
+
+const AUTO_PUBLISH_INTERVAL_MS = 60_000;
 
 const URGENCY_ORDER: UrgencyLevel[] = ["Critical", "High", "Medium", "Low", "Informational"];
 
@@ -186,6 +190,36 @@ export default function GlobalCommandCenter() {
     }, 7000);
 
     return () => { activeFlag = false; unsub(); clearInterval(poll); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facilityId]);
+
+  // Auto-publish safety net: addRoom()/createFacility() already publish
+  // immediately on creation, but that write can silently fail (a dropped
+  // request, a transient network blip) with nothing visible to the user —
+  // the local UI looks fine while the facility a patient scans into never
+  // saw the new room. Every 60s while this facility is open, quietly
+  // re-publish it and every room, self-healing any publish that didn't
+  // actually land. No-op (and no network calls) without Supabase configured.
+  useEffect(() => {
+    if (!facilityId || !SUPABASE_ENABLED) return;
+    let activeFlag = true;
+
+    async function publishNow() {
+      const ws = store.getWorkspace(facilityId!);
+      const res = await upsertFacilityFromStore({
+        id: ws.facility.id, name: ws.facility.name, facilityCode: ws.facility.facilityCode, teamName: ws.facility.teamName,
+      }).catch(() => ({ ok: false }));
+      if (!activeFlag || !res.ok) return;
+      for (const r of ws.rooms) {
+        if (!activeFlag) return;
+        await upsertRoom({
+          id: r.id, facilityId: facilityId!, roomNumber: r.roomNumber, displayName: r.displayName, active: r.active,
+        }).catch(() => {});
+      }
+    }
+
+    const interval = setInterval(publishNow, AUTO_PUBLISH_INTERVAL_MS);
+    return () => { activeFlag = false; clearInterval(interval); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 

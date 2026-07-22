@@ -13,6 +13,7 @@
 
 import { getStore } from "@/lib/store";
 import { lookupFacilityWithRooms } from "@/lib/supabase/facilities";
+import { SUPABASE_ENABLED } from "@/lib/supabase";
 
 export interface FacilityLookupResult {
   facilityId: string;
@@ -29,9 +30,39 @@ export async function lookupFacilityByCode(
   if (!normalized) return null;
 
   const store = getStore();
-
-  // 1. Same device / same browser — instant.
   const localId = store.facilityIdForCode(normalized);
+
+  // Whenever Supabase is configured, it's the source of truth — a room
+  // added on one device (or even earlier on this same one, before a page
+  // reload) must show up here. A stale local cache from a previous visit
+  // used to short-circuit this and return outdated rooms forever, no
+  // matter how many times the code was re-entered. Local lookup is now
+  // only the fallback when Supabase is unavailable or the fetch fails.
+  if (SUPABASE_ENABLED) {
+    try {
+      const remote = await lookupFacilityWithRooms(normalized);
+      if (remote) {
+        // Seed/refresh the local workspace with the EXACT remote ids so
+        // room selection and the room screen line up across devices.
+        store.seedRemoteFacility({
+          id: remote.id,
+          name: remote.name,
+          facilityCode: remote.facilityCode,
+          teamName: remote.teamName,
+          rooms: remote.rooms,
+        });
+        return {
+          facilityId: remote.id,
+          facilityName: remote.name,
+          facilityCode: remote.facilityCode,
+          teamName: remote.teamName,
+          source: "supabase",
+        };
+      }
+    } catch { /* fall through to local, if any */ }
+  }
+
+  // Local-only fallback: Supabase disabled, unreachable, or found nothing.
   if (localId) {
     const ws = store.getWorkspace(localId);
     return {
@@ -43,29 +74,5 @@ export async function lookupFacilityByCode(
     };
   }
 
-  // 2. Any device / any network — Supabase public RPC (facility + rooms).
-  try {
-    const remote = await lookupFacilityWithRooms(normalized);
-    if (!remote) return null;
-
-    // Seed the local workspace with the EXACT remote ids so room selection
-    // and the room screen line up across devices.
-    store.seedRemoteFacility({
-      id: remote.id,
-      name: remote.name,
-      facilityCode: remote.facilityCode,
-      teamName: remote.teamName,
-      rooms: remote.rooms,
-    });
-
-    return {
-      facilityId: remote.id,
-      facilityName: remote.name,
-      facilityCode: remote.facilityCode,
-      teamName: remote.teamName,
-      source: "supabase",
-    };
-  } catch {
-    return null;
-  }
+  return null;
 }
