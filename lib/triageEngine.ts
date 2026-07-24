@@ -41,20 +41,25 @@ interface Signal {
 
 // CRITICAL — life/safety. Any one fires red.
 const CRITICAL: Signal[] = [
-  { id: "respiratory", critical: true, weight: 100, any: ["can't breathe", "cant breathe", "cannot breathe", "can not breathe", "trouble breathing", "hard to breathe", "short of breath", "not breathing", "struggling to breathe", "gasping", "suffocating"] },
-  { id: "choking", critical: true, weight: 100, any: ["choking", "can't swallow air", "something stuck in my throat", "i'm choking"] },
-  { id: "cardiac", critical: true, weight: 100, any: ["chest pain", "chest is tight", "chest tight", "heart hurts", "heart attack", "pressure in my chest", "my heart is racing badly", "heart racing"] },
-  { id: "stroke", critical: true, weight: 100, any: ["can't move my face", "face is drooping", "slurred", "can't speak", "cant speak", "numb on one side", "weak on one side", "stroke", "can't feel my arm", "can't feel my leg", "sudden numbness", "one side of my body"] },
-  { id: "fall", critical: true, weight: 95, any: ["i fell", "i've fallen", "ive fallen", "i have fallen", "fell down", "on the floor", "on the ground", "i fall"] },
+  { id: "respiratory", critical: true, weight: 100, any: ["can't breathe", "cant breathe", "cannot breathe", "can not breathe", "trouble breathing", "hard to breathe", "short of breath", "not breathing", "struggling to breathe", "gasping", "suffocating", "can't catch my breath", "cant catch my breath", "cannot catch my breath", "catching my breath", "can't get air", "cant get air", "can't get enough air", "gasping for air", "hard time breathing", "difficulty breathing", "breathing is hard", "hurts to breathe", "hurts when i breathe", "painful to breathe", "can't stop coughing", "wheezing"] },
+  { id: "choking", critical: true, weight: 100, any: ["choking", "can't swallow air", "something stuck in my throat", "i'm choking", "can't swallow", "cant swallow", "food is stuck", "stuck in my throat"] },
+  { id: "cardiac", critical: true, weight: 100, any: ["chest pain", "chest is tight", "chest tight", "heart hurts", "heart attack", "pressure in my chest", "my heart is racing badly", "heart racing", "chest is heavy", "chest feels heavy", "chest feels really heavy", "heavy chest", "chest feels really tight", "tightness in my chest", "chest hurts", "pain in my chest", "heart is pounding", "heart pounding", "heart is racing", "fluttering in my chest", "cold sweat"] },
+  { id: "stroke", critical: true, weight: 100, any: ["can't move my face", "face is drooping", "slurred", "can't speak", "cant speak", "numb on one side", "weak on one side", "stroke", "can't feel my arm", "can't feel my leg", "sudden numbness", "one side of my body", "seeing double", "double vision", "lost my vision", "can't see out of", "half my body", "half my face", "one side of my face", "words won't come out", "can't find my words", "slurring", "speech is wrong", "speech is off", "speech coming out wrong", "speech is coming out wrong", "talking funny", "trouble speaking", "trouble talking", "words are wrong", "face feels funny", "arm went numb", "leg went numb", "feels numb", "going numb"] },
+  { id: "fall", critical: true, weight: 95, any: ["i fell", "i've fallen", "ive fallen", "i have fallen", "fell down", "on the floor", "on the ground", "i fall", "slipped and", "i slipped", "tripped and", "fell out of bed", "fell in the"] },
   { id: "head", critical: true, weight: 95, any: ["hit my head", "head injury", "banged my head", "hit my head hard"] },
-  { id: "bleeding", critical: true, weight: 95, any: ["bleeding", "blood everywhere", "lot of blood", "won't stop bleeding", "wont stop bleeding", "hemorrhage", "vomiting blood", "coughing up blood", "throwing up blood"] },
-  { id: "unconscious", critical: true, weight: 100, any: ["can't wake", "cant wake", "won't wake up", "wont wake up", "unconscious", "passed out", "passing out", "blacking out", "fainted"] },
+  { id: "bleeding", critical: true, weight: 95, any: ["bleeding", "blood everywhere", "lot of blood", "won't stop bleeding", "wont stop bleeding", "hemorrhage", "vomiting blood", "coughing up blood", "throwing up blood", "blood in the toilet", "blood in my stool", "blood in my urine", "blood in my pee", "passing blood", "bleeding through", "soaked through", "blood on my"] },
+  // Post-surgical / device emergencies — high-frequency in a rehab and
+  // post-acute setting specifically, and previously not covered at all.
+  { id: "wound_device", critical: true, weight: 95, any: ["stitches opened", "stitches came out", "incision opened", "incision is open", "wound opened", "wound is open", "staples came out", "my iv came out", "iv came out", "iv is out", "catheter came out", "catheter is out", "feeding tube came out", "tube came out", "drain came out", "pulled out my"] },
+  { id: "unconscious", critical: true, weight: 100, any: ["can't wake", "cant wake", "won't wake up", "wont wake up", "unconscious", "passed out", "passing out", "blacking out", "fainted", "going to pass out", "about to pass out", "gonna pass out", "everything went black", "vision going dark", "going to faint"] },
   { id: "seizure", critical: true, weight: 100, any: ["seizure", "convulsing", "shaking uncontrollably"] },
-  { id: "allergic", critical: true, weight: 95, any: ["allergic reaction", "throat is closing", "throat closing", "anaphylaxis", "can't feel my tongue"] },
-  { id: "overdose", critical: true, weight: 100, any: ["overdose", "took too many pills", "took too much medication", "swallowed too many", "took the whole bottle"] },
-  { id: "diabetic", critical: true, weight: 95, any: ["low blood sugar", "diabetic emergency", "insulin reaction", "blood sugar is low", "shaking and sweating"] },
-  { id: "emergency", critical: true, weight: 90, any: ["emergency", "call 911", "help me now", "i'm dying", "im dying", "i am dying", "code blue"] },
-  { id: "suicidal", critical: true, weight: 100, any: ["want to die", "kill myself", "end my life", "hurt myself"] },
+  { id: "allergic", critical: true, weight: 95, any: ["allergic reaction", "throat is closing", "throat closing", "anaphylaxis", "can't feel my tongue", "throat feels tight", "tongue is swelling", "lips are swelling", "face is swelling", "breaking out in hives", "hives"] },
+  { id: "overdose", critical: true, weight: 100, any: ["overdose", "took too many pills", "took too much medication", "swallowed too many", "took the whole bottle", "took my pills twice", "double dose"] },
+  { id: "diabetic", critical: true, weight: 95, any: ["low blood sugar", "diabetic emergency", "insulin reaction", "blood sugar is low", "shaking and sweating", "sugar is low", "sugar feels low"] },
+  { id: "emergency", critical: true, weight: 90, any: ["emergency", "call 911", "help me now", "i'm dying", "im dying", "i am dying", "code blue", "something is really wrong", "something's really wrong"] },
+  // Suicidal ideation is frequently expressed indirectly — the euphemisms
+  // matter as much as the explicit phrasings.
+  { id: "suicidal", critical: true, weight: 100, any: ["want to die", "kill myself", "end my life", "hurt myself", "don't want to be here anymore", "dont want to be here anymore", "don't want to live", "dont want to live", "better off without me", "no reason to live", "no reason to go on", "want it to end", "want to end it", "don't want to wake up"] },
 ];
 
 // HIGH — needs prompt clinical attention.
@@ -67,7 +72,15 @@ const HIGH: Signal[] = [
   { id: "fever", weight: 45, any: ["fever", "burning up", "very hot", "high temperature", "chills"] },
   { id: "vomiting", weight: 45, any: ["throwing up", "vomiting", "can't stop vomiting", "nauseous and", "keep vomiting"] },
   { id: "fall_risk", weight: 45, any: ["going to fall", "about to fall", "losing my balance", "can't balance", "feel unsteady"] },
-  { id: "confused", weight: 45, any: ["confused", "don't know where i am", "disoriented", "can't think straight"] },
+  { id: "confused", weight: 45, any: ["confused", "don't know where i am", "disoriented", "can't think straight", "can't remember", "feel foggy"] },
+  // Concerning but genuinely ambiguous — deliberately High, not Critical, so a
+  // rehab patient winded after PT doesn't fire a red alert, while still getting
+  // a prompt look. The AI layer can raise these; it can never lower them.
+  { id: "breathless_mild", weight: 55, any: ["out of breath", "winded", "short of air", "breathing feels off", "hard to catch up"] },
+  { id: "weakness", weight: 50, any: ["really weak", "very weak", "so weak", "no strength", "legs gave out", "legs are giving out", "can't hold myself up"] },
+  { id: "unwell_vague", weight: 50, any: ["something is wrong", "something's wrong", "doesn't feel right", "does not feel right", "feel really bad", "feel awful", "feel terrible", "feel very sick", "feel really sick"] },
+  { id: "swelling", weight: 45, any: ["swelling", "swollen", "leg is puffy", "ankles are swollen"] },
+  { id: "urinary", weight: 45, any: ["can't urinate", "cant urinate", "can't pee", "haven't gone to the bathroom", "burns when i pee", "hurts to pee"] },
 ];
 
 // MEDIUM — assistance needed, not clinical emergency.

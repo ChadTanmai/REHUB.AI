@@ -19,6 +19,22 @@ describe("triage — critical safety phrases", () => {
     "I'm coughing up blood",
     "I think I took too many pills",
     "my blood sugar is low and I'm shaking and sweating",
+    // Realistic phrasings found missing via manual probing before a real
+    // facility deployment — the exact substrings above all matched, but
+    // patients don't always phrase things in the engine's existing fragments.
+    "my chest feels really heavy",
+    "I'm having trouble catching my breath",
+    "I can't catch my breath",
+    "it hurts when I breathe",
+    "there's blood in the toilet",
+    "my heart is pounding really fast",
+    "I feel like I'm going to pass out",
+    "half my body feels numb",
+    "I'm seeing double",
+    "my stitches opened up",
+    "I think my IV came out",
+    "I don't want to be here anymore", // indirect suicidal ideation
+    "my speech is coming out wrong",
   ];
 
   for (const phrase of critical) {
@@ -27,6 +43,17 @@ describe("triage — critical safety phrases", () => {
       expect(result.urgency).toBe("Critical");
     });
   }
+
+  // Regression guard for a real bug found while adding the phrases above:
+  // "catch my breath" preceded by "can't" was being swallowed by the
+  // generic negation filter (which sees "n't " and assumes the symptom
+  // is being denied) — the exact opposite of the truth for breathing
+  // complaints, where "can't X" IS the emergency. Any future respiratory
+  // fragment must be negation-safe the same way "can't breathe" already was.
+  it("does not let the negation filter swallow a breathing complaint phrased as \"can't ...\"", () => {
+    const result = triage("I can't catch my breath");
+    expect(result.urgency).toBe("Critical");
+  });
 });
 
 describe("triage — routine/comfort requests stay low", () => {
