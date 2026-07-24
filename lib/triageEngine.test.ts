@@ -35,6 +35,17 @@ describe("triage — critical safety phrases", () => {
     "I think my IV came out",
     "I don't want to be here anymore", // indirect suicidal ideation
     "my speech is coming out wrong",
+    // Second coverage pass — oxygen/device failure, visible color change,
+    // sudden severe headache, acute abdomen, and delirium, none of which
+    // had any signal coverage at all before this pass.
+    "my oxygen tank is empty",
+    "the cpap isn't working",
+    "his lips are turning blue",
+    "her skin looks grey",
+    "this is the worst headache of my life",
+    "my stomach is hard as a rock and hurts so bad",
+    "she's seeing things that aren't there",
+    "he's suddenly confused and not making sense",
   ];
 
   for (const phrase of critical) {
@@ -61,6 +72,40 @@ describe("triage — routine/comfort requests stay low", () => {
 
   for (const phrase of routine) {
     it(`does not classify "${phrase}" as Critical or High`, () => {
+      const result = triage(phrase);
+      expect(["Critical", "High"]).not.toContain(result.urgency);
+    });
+  }
+});
+
+describe("triage — ambiguous symptoms are held at the correct band, not over-escalated", () => {
+  // These read as "concerning" but must NOT reach Critical on their own —
+  // over-escalating routine-adjacent language is exactly how a triage system
+  // trains staff to stop trusting its alerts. The AI layer, not this
+  // deterministic floor, is responsible for raising these further with context.
+  const shouldBeHighNotCritical: [string, string][] = [
+    ["panic attack framing must not fire the cardiac critical signal", "I think I'm having a panic attack"],
+    ["a reported medication error is High, not an automatic Critical", "I think they gave me the wrong pill"],
+    ["infection signs are High, not Critical, absent other red flags", "my incision looks infected and there's pus"],
+    ["a subjective blood-pressure complaint is High, not Critical", "my blood pressure feels really high"],
+    ["severe shivering alone is High, not Critical", "I can't stop shivering"],
+    ["swallowing difficulty alone (no choking) is High, not Critical", "I'm having trouble swallowing my food"],
+  ];
+  for (const [why, phrase] of shouldBeHighNotCritical) {
+    it(`"${phrase}" -> High, not Critical (${why})`, () => {
+      const result = triage(phrase);
+      expect(result.urgency).toBe("High");
+    });
+  }
+
+  const shouldBeMediumNotHigh: [string, string][] = [
+    ["broken mobility equipment is logistics, not a clinical emergency", "my wheelchair is broken"],
+    ["a scheduling question about therapy is not urgent", "when is my physical therapy session"],
+    ["a family-contact request is not urgent", "can you call my daughter for me"],
+    ["a hygiene assistance request is routine", "I need help with a shower"],
+  ];
+  for (const [why, phrase] of shouldBeMediumNotHigh) {
+    it(`"${phrase}" -> Medium, not High/Critical (${why})`, () => {
       const result = triage(phrase);
       expect(["Critical", "High"]).not.toContain(result.urgency);
     });

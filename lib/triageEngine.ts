@@ -60,6 +60,26 @@ const CRITICAL: Signal[] = [
   // Suicidal ideation is frequently expressed indirectly — the euphemisms
   // matter as much as the explicit phrasings.
   { id: "suicidal", critical: true, weight: 100, any: ["want to die", "kill myself", "end my life", "hurt myself", "don't want to be here anymore", "dont want to be here anymore", "don't want to live", "dont want to live", "better off without me", "no reason to live", "no reason to go on", "want it to end", "want to end it", "don't want to wake up"] },
+  // Respiratory-equipment failure — a resident on home oxygen or a CPAP
+  // whose supply fails is a respiratory emergency in progress, not a
+  // maintenance request. Distinct from the generic "respiratory" signal
+  // because the phrasing centers on the device, not the breathing itself.
+  { id: "oxygen_equipment", critical: true, weight: 95, any: ["oxygen ran out", "out of oxygen", "oxygen tank is empty", "oxygen tank empty", "no more oxygen", "cpap isn't working", "cpap is not working", "cpap stopped", "oxygen alarm", "oxygen machine stopped", "oxygen machine is beeping", "ventilator alarm", "cannula fell off", "oxygen is off", "oxygen came off", "oxygen concentrator stopped"] },
+  // Visible color change — a lay-language way patients and family describe
+  // cyanosis/pallor, both of which indicate a circulation or oxygenation
+  // crisis regardless of what else is being said.
+  { id: "color_change", critical: true, weight: 95, any: ["turning blue", "lips are blue", "lips turning blue", "looks blue", "turning grey", "turning gray", "skin looks grey", "skin looks gray", "turning pale", "looks very pale", "skin is grey", "skin is gray", "fingernails are blue", "nail beds are blue", "face looks grey", "face looks gray"] },
+  // Sudden, severe headache is a classic stroke/aneurysm red flag distinct
+  // from ordinary headache (which stays uncategorized/Medium on purpose).
+  { id: "headache_severe", critical: true, weight: 90, any: ["worst headache of my life", "worst headache i've ever had", "sudden severe headache", "sudden bad headache", "splitting headache", "head is pounding really bad", "thunderclap headache"] },
+  // Acute abdominal emergency — a rigid/board-like or unrelenting abdomen
+  // is a surgical red flag, especially in a post-surgical rehab population.
+  { id: "abdominal_severe", critical: true, weight: 90, any: ["severe stomach pain", "stomach pain won't stop", "worst stomach pain", "abdomen is hard", "stomach is rigid", "stomach is hard as a rock", "unbearable stomach pain", "belly pain won't stop"] },
+  // Sudden confusion/hallucination/combativeness — acute delirium is a
+  // medical emergency in elderly/post-acute patients, not routine confusion.
+  // Kept separate from the existing (non-critical) "confused" HIGH signal,
+  // which covers ordinary disorientation.
+  { id: "acute_delirium", critical: true, weight: 90, any: ["seeing things that aren't there", "seeing things that are not there", "hearing voices", "suddenly confused", "suddenly not making sense", "acting very strange", "not himself suddenly", "not herself suddenly", "combative and confused"] },
 ];
 
 // HIGH — needs prompt clinical attention.
@@ -81,6 +101,20 @@ const HIGH: Signal[] = [
   { id: "unwell_vague", weight: 50, any: ["something is wrong", "something's wrong", "doesn't feel right", "does not feel right", "feel really bad", "feel awful", "feel terrible", "feel very sick", "feel really sick"] },
   { id: "swelling", weight: 45, any: ["swelling", "swollen", "leg is puffy", "ankles are swollen"] },
   { id: "urinary", weight: 45, any: ["can't urinate", "cant urinate", "can't pee", "haven't gone to the bathroom", "burns when i pee", "hurts to pee"] },
+  // Anxiety/panic can present identically to cardiac symptoms — deliberately
+  // High rather than Critical when named explicitly as panic, but the
+  // symptom-based cardiac/respiratory signals above still fire Critical for
+  // the same physical complaints without the "panic" framing, which is the
+  // correct safety-biased outcome (never assume it's "just anxiety").
+  { id: "panic", weight: 50, any: ["panic attack", "having a panic attack", "can't calm down", "cant calm down", "anxiety attack", "feel like i'm panicking", "feel like im panicking"] },
+  // A medication error report needs a nurse to verify promptly (wrong drug,
+  // wrong dose, wrong patient), but isn't automatically a Critical symptom
+  // on its own — the AI layer can raise it further from context.
+  { id: "med_error", weight: 55, any: ["wrong pill", "wrong pills", "wrong medication", "wrong medicine", "gave me the wrong", "took the wrong", "wrong dose", "extra dose by mistake", "double dosed by accident"] },
+  { id: "infection_signs", weight: 50, any: ["wound looks infected", "incision looks infected", "looks infected", "redness around my", "red streaks", "pus coming from", "draining pus", "warm and red", "smells bad", "foul smell from"] },
+  { id: "bp_symptoms", weight: 45, any: ["blood pressure is really high", "blood pressure feels high", "pressure feels really high", "my pressure is high", "blood pressure is really low", "pressure feels low"] },
+  { id: "cold_severe", weight: 45, any: ["can't stop shivering", "cant stop shivering", "freezing and can't warm up", "shivering uncontrollably", "extremely cold and shaking"] },
+  { id: "swallowing_difficulty", weight: 50, any: ["trouble swallowing", "hard to swallow", "difficulty swallowing", "food went down wrong", "choked a little on", "keep choking on my food"] },
 ];
 
 // MEDIUM — assistance needed, not clinical emergency.
@@ -92,6 +126,13 @@ const MEDIUM: Signal[] = [
   { id: "pain_mild", weight: 30, any: ["pain", "hurts", "aching", "sore", "uncomfortable"] },
   { id: "reposition", weight: 28, any: ["help me turn", "reposition", "uncomfortable in bed", "adjust my bed", "move my pillow under"] },
   { id: "food", weight: 25, any: ["hungry", "food", "something to eat", "missed my meal", "when is lunch", "when is dinner"] },
+  // Rehab-population-specific: mobility equipment, therapy sessions, and
+  // family communication are frequent, non-emergency, but real needs that
+  // shouldn't fall through to Custom/uncategorized.
+  { id: "equipment", weight: 30, any: ["wheelchair is broken", "wheelchair broke", "walker is broken", "walker broke", "call button", "bed alarm", "cane broke", "brace isn't fitting", "sling is uncomfortable"] },
+  { id: "therapy", weight: 28, any: ["physical therapy", "occupational therapy", "my therapy session", "pt session", "ot session", "therapy appointment", "speech therapy"] },
+  { id: "family_contact", weight: 28, any: ["call my family", "call my daughter", "call my son", "call my wife", "call my husband", "my family isn't answering", "need to reach my family", "talk to my family"] },
+  { id: "hygiene", weight: 28, any: ["need a shower", "need to bathe", "help me wash", "brush my teeth", "need a bed bath", "haven't been cleaned"] },
 ];
 
 // LOW — comfort requests.
@@ -248,13 +289,25 @@ function buildReason(urgency: UrgencyLevel, matched: string[], escalated: boolea
   const human: Record<string, string> = {
     respiratory: "breathing difficulty", choking: "choking", cardiac: "chest/heart symptoms",
     stroke: "possible stroke signs", fall: "a fall", head: "head injury", bleeding: "bleeding",
+    wound_device: "a wound or medical device problem",
     unconscious: "loss of consciousness", seizure: "seizure", allergic: "allergic reaction",
+    overdose: "possible medication overdose", diabetic: "a possible diabetic emergency",
     emergency: "an explicit emergency call", suicidal: "self-harm risk",
+    oxygen_equipment: "oxygen/breathing equipment failure", color_change: "a visible color change (circulation/oxygen concern)",
+    headache_severe: "a sudden severe headache", abdominal_severe: "severe abdominal pain",
+    acute_delirium: "sudden confusion or altered mental status",
     med_urgent: "a medication need", immobile: "inability to move", pain_severe: "severe pain",
     pain_worse: "worsening pain", dizzy: "dizziness", fever: "fever", vomiting: "vomiting",
     fall_risk: "fall risk", confused: "confusion", help_generic: "a request for help",
+    breathless_mild: "shortness of breath after exertion", weakness: "significant weakness",
+    unwell_vague: "a general feeling of being unwell", swelling: "swelling", urinary: "a urinary symptom",
+    panic: "possible panic/anxiety", med_error: "a possible medication error",
+    infection_signs: "possible signs of infection", bp_symptoms: "a blood pressure concern",
+    cold_severe: "severe cold/shivering", swallowing_difficulty: "difficulty swallowing",
     mobility_help: "mobility assistance", bathroom: "a bathroom need", water: "thirst/water",
     pain_mild: "discomfort", reposition: "repositioning", food: "food/meal",
+    equipment: "a mobility equipment issue", therapy: "a therapy session need",
+    family_contact: "a request to contact family", hygiene: "a hygiene need",
     blanket: "a blanket", pillow: "a pillow", comfort: "comfort/environment", tidy: "tidying",
     question: "a question", thanks: "an acknowledgement",
   };
