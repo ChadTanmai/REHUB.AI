@@ -37,11 +37,16 @@ export default function AnimatedDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-navy">Care Team Dashboard</p>
-          <p className="text-xs text-slate/60">Maplewood Care Team</p>
+          <p className="text-xs text-slate/60">Maplewood Care Team (example)</p>
         </div>
-        <span className="flex items-center gap-1.5 rounded-md bg-offwhite px-2 py-1 text-xs font-medium text-slate">
-          <span className="h-1.5 w-1.5 rounded-full bg-teal" />
-          Live
+        {/* Deliberately not "Live" + a green dot — this is a static mockup on a
+            public marketing page. Names/rooms are fictional, but "Live" plus
+            real-looking data would read as an actual patient feed. */}
+        <span className="flex items-center gap-1.5 rounded-md bg-offwhite px-2 py-1 text-xs font-medium text-slate/70">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <circle cx="12" cy="12" r="10" /><path d="M12 8v4l2.5 2.5" />
+          </svg>
+          Sample data
         </span>
       </div>
 
@@ -81,6 +86,10 @@ export default function AnimatedDashboard() {
         <span>4 active requests</span>
         <span>Avg response 4.2 min</span>
       </div>
+
+      <p className="mt-3 text-center text-[11px] text-slate/45">
+        Illustrative example — names, rooms, and requests are fictional, not real patient data.
+      </p>
     </motion.div>
   );
 }
