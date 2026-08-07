@@ -8,6 +8,7 @@ import SafetyNote from "@/components/SafetyNote";
 import EmergencyDisclaimer, { hasAcknowledgedDisclaimer } from "@/components/EmergencyDisclaimer";
 import { RehubMark } from "@/components/RehubLogo";
 import PresenceBeacon from "@/components/PresenceBeacon";
+import AutoUpdater from "@/components/AutoUpdater";
 import { getStore } from "@/lib/store";
 import { getRoomSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
@@ -59,6 +60,10 @@ export default function RoomScreen() {
         roomNumber={room.roomNumber}
         homePath={`/room/${roomId}`}
       />
+      {/* Room tablets are unattended kiosks — safe to self-update as soon as a
+          new build lands, but never while the patient is mid-request or has
+          the safety disclaimer open. */}
+      <AutoUpdater mode="aggressive" busy={showDisclaimer} />
       {showDisclaimer && (
         <EmergencyDisclaimer roomId={roomId} onAcknowledge={() => setAcknowledged(true)} />
       )}

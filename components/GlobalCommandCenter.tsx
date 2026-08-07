@@ -35,6 +35,8 @@ import { aiTriage, aiCopilot } from "@/lib/ai/client";
 import { buildPatientMemory } from "@/lib/ai/memory";
 import { upsertFacilityFromStore, upsertRoom } from "@/lib/supabase/facilities";
 import PresenceBeacon from "@/components/PresenceBeacon";
+import AutoUpdater from "@/components/AutoUpdater";
+import { chimeCritical, chimeNewRequest, primeChime } from "@/lib/chime";
 import { SUPABASE_ENABLED } from "@/lib/supabase";
 
 const AUTO_PUBLISH_INTERVAL_MS = 60_000;
@@ -54,21 +56,9 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 3600)}h ago`;
 }
 
+/** Critical alert tone — Rehub's signature urgent figure (see lib/chime.ts). */
 function beep() {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
-    const ctx = new Ctx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.type = "sine"; o.frequency.value = 880;
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
-    o.start(); o.stop(ctx.currentTime + 0.5);
-    setTimeout(() => ctx.close().catch(() => {}), 700);
-  } catch { /* ignore */ }
+  chimeCritical();
 }
 
 interface Toast { id: string; roomNumber: string; residentName: string; urgency: UrgencyLevel; preview: string }
@@ -179,6 +169,11 @@ export default function GlobalCommandCenter() {
         const req = store.getWorkspace(facilityId).requests.find((x) => x.id === r.id);
         if (req) showToast(req);
         if (r.urgencyLevel === "Critical") setOpen(true); // auto-open on Critical
+        // Audible for EVERY new request, not just Critical — a nurse doing
+        // rounds elsewhere in the unit can't watch the screen. Critical gets
+        // the urgent figure (fired just below); everything else gets the
+        // gentle triad so the two are distinguishable without looking.
+        else chimeNewRequest();
         void enrichWithAI(r.id); // smarter triage (no-op without an API key)
       }
       if (r.urgencyLevel === "Critical" && !seenCritical.current.has(r.id)) {
@@ -193,6 +188,23 @@ export default function GlobalCommandCenter() {
     return () => { activeFlag = false; unsub(); clearInterval(poll); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
+
+  // Browsers refuse to play audio until the user has interacted with the page,
+  // so the very first alert of a shift would be silent. Unlock the audio
+  // context on the first click/tap anywhere, then stop listening.
+  useEffect(() => {
+    const unlock = () => {
+      primeChime();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   // Auto-publish safety net: addRoom()/createFacility() already publish
   // immediately on creation, but that write can silently fail (a dropped
@@ -300,6 +312,10 @@ export default function GlobalCommandCenter() {
         kind="staff"
         label={nurseName === "Your care team" ? "Staff screen" : nurseName}
       />
+      {/* Pick up new deploys without anyone refreshing. Staff screens use the
+          non-interrupting policy: silent reload only while backgrounded,
+          otherwise a banner the nurse dismisses on their own terms. */}
+      <AutoUpdater mode="prompt" />
       {/* Floating toast bubble — appears even when the panel is closed */}
       <AnimatePresence>
         {toast && !open && (

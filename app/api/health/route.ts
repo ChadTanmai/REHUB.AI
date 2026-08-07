@@ -15,6 +15,10 @@ export function GET() {
       service: "rehub",
       timestamp: new Date().toISOString(),
       version: process.env.NEXT_PUBLIC_APP_VERSION ?? "1.0.0",
+      // Changes on every Vercel deploy. Clients poll this to detect that a
+      // newer build exists and refresh themselves — see lib/useAppVersion.ts.
+      // Falls back to a constant locally so dev never self-reloads.
+      build: process.env.VERCEL_DEPLOYMENT_ID ?? "dev",
     },
     {
       status: 200,
