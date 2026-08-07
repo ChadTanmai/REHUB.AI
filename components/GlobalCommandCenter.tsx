@@ -34,6 +34,7 @@ import { subscribeLiveSpeaking, type LiveSpeakingPayload } from "@/lib/supabase/
 import { aiTriage, aiCopilot } from "@/lib/ai/client";
 import { buildPatientMemory } from "@/lib/ai/memory";
 import { upsertFacilityFromStore, upsertRoom } from "@/lib/supabase/facilities";
+import PresenceBeacon from "@/components/PresenceBeacon";
 import { SUPABASE_ENABLED } from "@/lib/supabase";
 
 const AUTO_PUBLISH_INTERVAL_MS = 60_000;
@@ -293,6 +294,12 @@ export default function GlobalCommandCenter() {
 
   const panel = (
     <>
+      {/* Announce this staff screen to the admin device roster. */}
+      <PresenceBeacon
+        facilityId={facilityId}
+        kind="staff"
+        label={nurseName === "Your care team" ? "Staff screen" : nurseName}
+      />
       {/* Floating toast bubble — appears even when the panel is closed */}
       <AnimatePresence>
         {toast && !open && (

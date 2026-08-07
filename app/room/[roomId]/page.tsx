@@ -7,6 +7,7 @@ import ResidentRequestPanel from "@/components/ResidentRequestPanel";
 import SafetyNote from "@/components/SafetyNote";
 import EmergencyDisclaimer, { hasAcknowledgedDisclaimer } from "@/components/EmergencyDisclaimer";
 import { RehubMark } from "@/components/RehubLogo";
+import PresenceBeacon from "@/components/PresenceBeacon";
 import { getStore } from "@/lib/store";
 import { getRoomSession } from "@/lib/session";
 import { useMounted, useStoreVersion } from "@/lib/useRehub";
@@ -50,6 +51,14 @@ export default function RoomScreen() {
 
   return (
     <div className="flex min-h-screen flex-col bg-offwhite">
+      <PresenceBeacon
+        facilityId={facilityId}
+        kind="room"
+        label={`Room ${room.roomNumber}`}
+        roomId={roomId}
+        roomNumber={room.roomNumber}
+        homePath={`/room/${roomId}`}
+      />
       {showDisclaimer && (
         <EmergencyDisclaimer roomId={roomId} onAcknowledge={() => setAcknowledged(true)} />
       )}

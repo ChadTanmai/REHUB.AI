@@ -25,6 +25,46 @@ export const dynamic = "force-dynamic";
 const VOICE_ID = process.env.ELEVENLABS_VOICE_ID ?? "EXAVITQu4vr4xnSDxMaL"; // "Sarah" — warm female
 const MODEL_ID = process.env.ELEVENLABS_MODEL_ID ?? "eleven_flash_v2_5";   // fast + cheap
 
+/**
+ * GET → remaining ElevenLabs character quota, for the admin/diagnostics view.
+ * Never returns the key itself, only usage numbers. Same-origin only so it
+ * can't be scraped cross-site.
+ */
+export async function GET(req: Request) {
+  const key = process.env.ELEVENLABS_API_KEY;
+  const enabled = process.env.ELEVENLABS_ENABLED === "true";
+  if (!sameOriginOk(req)) return Response.json({ available: false }, { status: 403 });
+  if (!key) return Response.json({ available: false, reason: "No ELEVENLABS_API_KEY configured." });
+  try {
+    const r = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
+      headers: { "xi-api-key": key },
+    });
+    if (!r.ok) {
+      return Response.json({ available: false, reason: `ElevenLabs ${r.status}` }, { status: 502 });
+    }
+    const s = await r.json();
+    const used = Number(s.character_count ?? 0);
+    const limit = Number(s.character_limit ?? 0);
+    return Response.json({
+      available: true,
+      enabled,
+      used,
+      limit,
+      remaining: Math.max(0, limit - used),
+      percentUsed: limit ? Math.round((used / limit) * 1000) / 10 : null,
+      tier: s.tier ?? "unknown",
+      resetsAt: s.next_character_count_reset_unix
+        ? new Date(s.next_character_count_reset_unix * 1000).toISOString()
+        : null,
+    });
+  } catch (e) {
+    return Response.json(
+      { available: false, reason: e instanceof Error ? e.message : String(e) },
+      { status: 502 },
+    );
+  }
+}
+
 export async function POST(req: Request) {
   const key = process.env.ELEVENLABS_API_KEY;
   const enabled = process.env.ELEVENLABS_ENABLED === "true";

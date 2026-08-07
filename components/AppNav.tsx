@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/command", label: "Command center" },
   { href: "/rooms", label: "Patients" },
   { href: "/facility", label: "Operations" },
+  { href: "/admin", label: "Admin" },
 ];
 
 export default function AppNav({
